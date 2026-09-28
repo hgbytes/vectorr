@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useExpenses } from '../ExpensesContext';
 import {
   FinancialGoal,
@@ -25,6 +27,16 @@ const PRIORITIES: GoalPriority[] = ['Essential', 'Important', 'Optional'];
 
 function formatCurrency(amount: number) {
   return `₹${amount.toFixed(2)}`;
+}
+
+function formatGoalDate(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function toDateValue(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function monthsUntil(targetDate: string) {
@@ -130,11 +142,11 @@ const SCENARIO_OPTIONS: {
   label: string;
   note: string;
 }[] = [
-  { key: 'essentials', label: 'ESSENTIALS FIRST', note: 'Essential, then important, then optional.' },
-  { key: 'deadline', label: 'EARLIEST DEADLINE', note: 'Funds the nearest target date first.' },
-  { key: 'growth', label: 'LONG-TERM GROWTH', note: 'Prioritizes the latest deadline for more runway.' },
-  { key: 'balanced', label: 'BALANCED', note: 'Splits funds in proportion to required contributions.' },
-  { key: 'user', label: 'USER PRIORITY', note: 'Follows the current goal register order.' },
+  { key: 'essentials', label: 'ESSENTIALS FIRST', note: 'Essentials, then important, then optional.' },
+  { key: 'deadline', label: 'EARLIEST DEADLINE', note: 'Nearest deadline funded first.' },
+  { key: 'growth', label: 'LONG-TERM GROWTH', note: 'Furthest deadline, more runway.' },
+  { key: 'balanced', label: 'BALANCED', note: 'Splits funds proportionally.' },
+  { key: 'user', label: 'USER PRIORITY', note: 'Your current goal order.' },
 ];
 
 interface ScenarioGoalResult {
@@ -229,13 +241,7 @@ function ScenarioPanel({
   if (!selected) return null;
   return (
     <View style={styles.scenarioPanel}>
-      <View style={styles.scenarioHeader}>
-        <View>
-          <Text style={styles.scenarioCaption}>VECTORR / WHAT-IF LAB</Text>
-          <Text style={styles.scenarioTitle}>PRIORITY SCENARIOS</Text>
-        </View>
-        <Text style={styles.scenarioCode}>NO SAVE</Text>
-      </View>
+      <Text style={styles.scenarioTitle}>PRIORITY SCENARIOS</Text>
       <View style={styles.scenarioTabs}>
         {results.map((result) => (
           <Pressable
@@ -249,7 +255,7 @@ function ScenarioPanel({
           </Pressable>
         ))}
       </View>
-      <Text style={styles.scenarioNote}>{selected.note} Compare this view without changing saved goals.</Text>
+      <Text style={styles.scenarioNote}>{selected.note}</Text>
       {selected.goals.map((item) => (
         <View key={item.goal.id} style={styles.scenarioRow}>
           <View style={styles.scenarioGoalName}>
@@ -257,26 +263,23 @@ function ScenarioPanel({
             <Text style={styles.scenarioGoalMeta}>{item.goal.priority.toUpperCase()}</Text>
           </View>
           <View style={styles.scenarioNumbers}>
-            <Text style={styles.scenarioNumber}>CONTRIB {formatCurrency(item.contribution)}/MO</Text>
-            <Text style={styles.scenarioNumber}>FINISH {formatProjectionDate(item.completionDate)}</Text>
+            <Text style={styles.scenarioNumber}>{formatCurrency(item.contribution)}/MO</Text>
+            <Text style={styles.scenarioNumber}>DONE {formatProjectionDate(item.completionDate)}</Text>
             <Text style={[styles.scenarioNumber, item.shortfall > 0 && styles.scenarioRisk]}>
-              {item.shortfall > 0 ? `SHORTFALL ${formatCurrency(item.shortfall)}` : `SURPLUS ${formatCurrency(item.projected - item.goal.targetAmount)}`}
+              {item.shortfall > 0 ? `SHORT ${formatCurrency(item.shortfall)}` : `+${formatCurrency(item.projected - item.goal.targetAmount)}`}
             </Text>
           </View>
         </View>
       ))}
-      <Text style={styles.scenarioFootnote}>
-        Projections use the profile return assumption, monthly compounding, and current available budget.
-      </Text>
       <Pressable
         style={styles.scenarioSaveButton}
         onPress={() => onSave(selected, conflicts)}
       >
-        <Text style={styles.scenarioSaveText}>[ SAVE THIS SCENARIO ]</Text>
+        <Text style={styles.scenarioSaveText}>[ SAVE SCENARIO ]</Text>
       </Pressable>
       {savedScenarios.length > 0 && (
         <View style={styles.savedScenarioPanel}>
-          <Text style={styles.sensitivityTitle}>SAVED SCENARIOS</Text>
+          <Text style={styles.sensitivityTitle}>SAVED</Text>
           {savedScenarios.map((scenario) => (
             <View key={scenario.id} style={styles.savedScenarioRow}>
               <View style={styles.savedScenarioName}>
@@ -299,15 +302,9 @@ function ScenarioPanel({
 function RecommendationPanel({ recommendations }: { recommendations: GoalRecommendation[] }) {
   return (
     <View style={styles.recommendationPanel}>
-      <View style={styles.scenarioHeader}>
-        <View>
-          <Text style={styles.scenarioCaption}>VECTORR / ADVISORY</Text>
-          <Text style={styles.scenarioTitle}>TRADE-OFFS TO REVIEW</Text>
-        </View>
-        <Text style={styles.scenarioCode}>NO GUARANTEE</Text>
-      </View>
+      <Text style={styles.scenarioTitle}>TRADE-OFFS</Text>
       {recommendations.length === 0 ? (
-        <Text style={styles.recommendationClear}>NO IMMEDIATE CHANGES SUGGESTED.</Text>
+        <Text style={styles.recommendationClear}>NOTHING TO CHANGE</Text>
       ) : (
         recommendations.map((recommendation, index) => (
           <View key={`${recommendation.title}-${index}`} style={styles.recommendationRow}>
@@ -326,9 +323,29 @@ function RecommendationPanel({ recommendations }: { recommendations: GoalRecomme
           </View>
         ))
       )}
-      <Text style={styles.recommendationNote}>
-        These are planning trade-offs based on your inputs, not personal financial advice or guarantees.
-      </Text>
+      <Text style={styles.recommendationNote}>Not financial advice.</Text>
+    </View>
+  );
+}
+
+function GoalDisclosure({
+  title,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.goalDisclosure}>
+      <Pressable onPress={onToggle} style={styles.goalDisclosureToggle} accessibilityRole="button">
+        <Text style={styles.goalDisclosureTitle}>{title}</Text>
+        <Text style={styles.goalDisclosureIcon}>{expanded ? '−' : '+'}</Text>
+      </Pressable>
+      {expanded && children}
     </View>
   );
 }
@@ -383,16 +400,10 @@ function ProgressDashboard({
 
   return (
     <View style={styles.dashboardPanel}>
-      <View style={styles.dashboardHeader}>
-        <View>
-          <Text style={styles.scenarioCaption}>VECTORR / COMMAND CENTER</Text>
-          <Text style={styles.dashboardTitle}>PROGRESS DASHBOARD</Text>
-        </View>
-        <Text style={styles.scenarioCode}>LIVE PLAN</Text>
-      </View>
+      <Text style={styles.dashboardTitle}>PROGRESS</Text>
       <View style={styles.dashboardMetrics}>
         <DashboardMetric label="AVAILABLE / MO" value={formatCurrency(availableBudget)} />
-        <DashboardMetric label="FUNDING PROGRESS" value={`${Math.round(progress)}%`} />
+        <DashboardMetric label="FUNDED" value={`${Math.round(progress)}%`} />
         <DashboardMetric label="CONFLICTS" value={String(conflicts.length)} risk={conflicts.length > 0} />
         <DashboardMetric label="ACTIVE GOALS" value={String(goals.length)} />
       </View>
@@ -401,7 +412,15 @@ function ProgressDashboard({
       </View>
       <View style={styles.statusRow}>
         {['ON TRACK', 'AT RISK', 'UNREALISTIC', 'COMPLETE'].map((status) => (
-          <Text key={status} style={styles.statusCount}>
+          <Text
+            key={status}
+            style={[
+              styles.statusCount,
+              status === 'AT RISK' && styles.statusAtRisk,
+              status === 'UNREALISTIC' && styles.statusUnrealistic,
+              status === 'COMPLETE' && styles.statusComplete,
+            ]}
+          >
             {status}: {statuses[status] ?? 0}
           </Text>
         ))}
@@ -409,7 +428,7 @@ function ProgressDashboard({
       <View style={styles.dashboardSection}>
         <Text style={styles.dashboardSectionTitle}>UPCOMING DEADLINES</Text>
         {upcoming.length === 0 ? (
-          <Text style={styles.dashboardMuted}>NO UPCOMING DEADLINES</Text>
+          <Text style={styles.dashboardMuted}>NONE UPCOMING</Text>
         ) : (
           upcoming.map((goal) => (
             <View key={goal.id} style={styles.dashboardDeadline}>
@@ -420,7 +439,7 @@ function ProgressDashboard({
         )}
       </View>
       <View style={styles.dashboardSection}>
-        <Text style={styles.dashboardSectionTitle}>CHANGES SINCE PREVIOUS REVIEW</Text>
+        <Text style={styles.dashboardSectionTitle}>SINCE LAST REVIEW</Text>
         {lastReview ? (
           <>
             <Text style={styles.dashboardChange}>BUDGET {signedCurrency(availableBudget - lastReview.availableGoalBudget)}</Text>
@@ -429,7 +448,7 @@ function ProgressDashboard({
             <Text style={styles.dashboardChange}>REVIEWED {new Date(lastReview.reviewedAt).toLocaleDateString()}</Text>
           </>
         ) : (
-          <Text style={styles.dashboardMuted}>NO PREVIOUS REVIEW. SAVE THIS PLAN TO START TRACKING CHANGES.</Text>
+          <Text style={styles.dashboardMuted}>SAVE A REVIEW TO TRACK CHANGES</Text>
         )}
       </View>
       <Pressable
@@ -438,7 +457,7 @@ function ProgressDashboard({
           await onSaveReview(currentSnapshot);
         }}
       >
-        <Text style={styles.reviewButtonText}>[ SAVE CURRENT REVIEW ]</Text>
+        <Text style={styles.reviewButtonText}>[ SAVE REVIEW ]</Text>
       </Pressable>
     </View>
   );
@@ -474,7 +493,7 @@ function detectConflicts(
   if (totalRequired > availableBudget) {
     conflicts.push({
       title: 'CONTRIBUTION OVERLOAD',
-      detail: `${formatCurrency(totalRequired)} required monthly versus ${formatCurrency(availableBudget)} available.`,
+      detail: `${formatCurrency(totalRequired)} needed vs ${formatCurrency(availableBudget)} available.`,
       goals: goals.map((goal) => goal.name),
     });
   }
@@ -493,7 +512,7 @@ function detectConflicts(
     if (group.length > 1 && group.every((item) => item.goal.deadlineType === 'Fixed') && required > availableBudget) {
       conflicts.push({
         title: 'DEADLINE COLLISION',
-        detail: `${group.length} goals need ${formatCurrency(required)} monthly before ${deadline}.`,
+        detail: `${group.length} goals need ${formatCurrency(required)}/mo before ${deadline}.`,
         goals: group.map((item) => item.goal.name),
       });
     }
@@ -505,8 +524,8 @@ function detectConflicts(
   );
   if (emergencyGap > 0) {
     conflicts.push({
-      title: 'EMERGENCY FUND COMPETITION',
-      detail: `Emergency savings are short by ${formatCurrency(emergencyGap)}. Goal contributions may delay the minimum reserve.`,
+      title: 'EMERGENCY FUND',
+      detail: `Short by ${formatCurrency(emergencyGap)}.`,
       goals: goals.map((goal) => goal.name),
     });
   }
@@ -516,8 +535,8 @@ function detectConflicts(
   );
   for (const item of pressuredGoals) {
     conflicts.push({
-      title: 'FIXED DEADLINE PRESSURE',
-      detail: `${formatCurrency(item.projection.requiredMonthly)} monthly is needed, but the equal-share plan provides ${formatCurrency(equalShare)}.`,
+      title: 'DEADLINE PRESSURE',
+      detail: `Needs ${formatCurrency(item.projection.requiredMonthly)}/mo, plan gives ${formatCurrency(equalShare)}.`,
       goals: [item.goal.name],
     });
   }
@@ -531,15 +550,15 @@ function detectConflicts(
   if (competingGoals.length > 0) {
     conflicts.push({
       title: 'DEBT / GOAL COMPETITION',
-      detail: `Debt payments use ${Math.round(debtRatio * 100)}% of income, limiting funds for non-essential goals.`,
+      detail: `Debt uses ${Math.round(debtRatio * 100)}% of income.`,
       goals: competingGoals.map((goal) => goal.name),
     });
   }
 
   if (monthlyExpenses === 0 && profile.monthlyIncome > 0) {
     conflicts.push({
-      title: 'INCOMPLETE EXPENSE BASELINE',
-      detail: 'No current-month expenses are recorded, so available budget may be overstated.',
+      title: 'NO EXPENSES LOGGED',
+      detail: 'This month has no recorded expenses yet.',
       goals: goals.map((goal) => goal.name),
     });
   }
@@ -551,18 +570,18 @@ function ConflictPanel({ conflicts }: { conflicts: GoalConflict[] }) {
   return (
     <View style={styles.conflictPanel}>
       <View style={styles.conflictHeader}>
-        <Text style={styles.conflictTitle}>CONFLICT DETECTION</Text>
-        <Text style={styles.conflictCode}>{conflicts.length} FLAG{conflicts.length === 1 ? '' : 'S'}</Text>
+        <Text style={styles.conflictTitle}>CONFLICTS</Text>
+        <Text style={styles.conflictCode}>{conflicts.length}</Text>
       </View>
       {conflicts.length === 0 ? (
-        <Text style={styles.conflictClear}>NO ACTIVE CONFLICTS DETECTED.</Text>
+        <Text style={styles.conflictClear}>NONE DETECTED</Text>
       ) : (
         conflicts.map((conflict, index) => (
           <View key={`${conflict.title}-${index}`} style={styles.conflictItem}>
             <Text style={styles.conflictItemTitle}>! {conflict.title}</Text>
             <Text style={styles.conflictDetail}>{conflict.detail}</Text>
             <Text style={styles.conflictGoals}>
-              AFFECTED: {conflict.goals.join(' / ')}
+              {conflict.goals.join(' / ')}
             </Text>
           </View>
         ))
@@ -594,6 +613,12 @@ export default function GoalsScreen() {
   const [category, setCategory] = useState<GoalCategory>('Custom');
   const [minimumContribution, setMinimumContribution] = useState('');
   const [deadlineType, setDeadlineType] = useState<GoalDeadlineType>('Fixed');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [savingGoal, setSavingGoal] = useState(false);
+  const [showConflicts, setShowConflicts] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [showScenarios, setShowScenarios] = useState(false);
   const monthlyExpenses = useMemo(() => {
     const now = new Date();
     return expenses
@@ -623,14 +648,14 @@ export default function GoalsScreen() {
     const increase = totalRequired - availableGoalBudget;
     recommendations.push({
       title: 'INCREASE MONTHLY CONTRIBUTION',
-      detail: `${formatCurrency(increase)} more per month would cover the combined required contributions. This may require reducing spending or extending a deadline.`,
+      detail: `${formatCurrency(increase)} more/month covers all goals.`,
       actionLabel: 'SET PLAN',
       onAction: async () => {
         await updateProfile({
           ...profile,
           goalContributionBudget: Math.ceil(totalRequired),
         });
-        Alert.alert('PLAN UPDATED', `PLANNED GOAL BUDGET SET TO ${formatCurrency(Math.ceil(totalRequired))}.`);
+        Alert.alert('PLAN UPDATED', `SET TO ${formatCurrency(Math.ceil(totalRequired))}.`);
       },
     });
   }
@@ -640,7 +665,7 @@ export default function GoalsScreen() {
   if (pressuredGoal) {
     recommendations.push({
       title: `EXTEND ${pressuredGoal.name.toUpperCase()} DEADLINE`,
-      detail: 'An extra six months would reduce the required monthly contribution, but delays completion.',
+      detail: 'Adds 6 months, lowers the monthly amount needed.',
       actionLabel: 'EXTEND +6M',
       onAction: async () => {
         await updateGoal(pressuredGoal.id, {
@@ -651,7 +676,7 @@ export default function GoalsScreen() {
     });
     recommendations.push({
       title: `REDUCE ${pressuredGoal.name.toUpperCase()} TARGET`,
-      detail: 'Reducing the target by 10% lowers the required contribution, but changes what the goal can fund.',
+      detail: 'Cuts the target 10%, lowers the monthly amount needed.',
       actionLabel: 'REDUCE 10%',
       onAction: async () => {
         const targetAmount = Math.round(pressuredGoal.targetAmount * 0.9);
@@ -662,7 +687,7 @@ export default function GoalsScreen() {
     if (pressuredGoal.priority === 'Optional') {
       recommendations.push({
         title: `REORDER ${pressuredGoal.name.toUpperCase()}`,
-        detail: 'Marking this goal important makes the priority trade-off explicit when comparing scenarios.',
+        detail: 'Marks this goal Important for scenario comparisons.',
         actionLabel: 'MARK IMPORTANT',
         onAction: async () => {
           await updateGoal(pressuredGoal.id, { priority: 'Important' });
@@ -677,13 +702,13 @@ export default function GoalsScreen() {
   if (debtRatio > 0.36 && monthlyExpenses > 0) {
     recommendations.push({
       title: 'REDUCE DISCRETIONARY SPENDING',
-      detail: `A 10% reduction in this month's recorded expenses would free about ${formatCurrency(monthlyExpenses * 0.1)} monthly for goals. Review spending before changing the plan.`,
+      detail: `Cutting spending 10% frees ~${formatCurrency(monthlyExpenses * 0.1)}/month.`,
     });
   }
   if (profile.emergencyFundTarget > profile.currentSavings && goals.some((goal) => goal.priority !== 'Essential')) {
     recommendations.push({
       title: 'BUILD THE EMERGENCY FUND FIRST',
-      detail: `The reserve is short by ${formatCurrency(profile.emergencyFundTarget - profile.currentSavings)}. Prioritizing it protects optional goals from unexpected withdrawals.`,
+      detail: `Short by ${formatCurrency(profile.emergencyFundTarget - profile.currentSavings)}.`,
     });
   }
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>('essentials');
@@ -724,50 +749,61 @@ export default function GoalsScreen() {
         (conflict) => `${conflict.title}: ${conflict.goals.join(' / ')}`
       ),
     });
-    Alert.alert('SCENARIO SAVED', `${result.label} was saved for later comparison.`);
+    Alert.alert('SCENARIO SAVED', `${result.label} saved.`);
   };
 
   const handleAdd = async () => {
-    const target = targetAmount.trim() === '' ? 0 : Number.parseFloat(targetAmount);
-    const current = currentAmount.trim() === '' ? 0 : Number.parseFloat(currentAmount);
-    const minimum = minimumContribution.trim() === '' ? 0 : Number.parseFloat(minimumContribution);
+    setFormError('');
+    const target = targetAmount.trim() === '' ? 0 : Number.parseFloat(targetAmount.replace(/,/g, ''));
+    const current = currentAmount.trim() === '' ? 0 : Number.parseFloat(currentAmount.replace(/,/g, ''));
+    const minimum = minimumContribution.trim() === '' ? 0 : Number.parseFloat(minimumContribution.replace(/,/g, ''));
     const deadline = new Date(`${targetDate}T00:00:00`);
 
     if (!name.trim() || !Number.isFinite(target) || target <= 0) {
-      Alert.alert('INVALID GOAL', 'ADD A NAME AND A TARGET ABOVE ZERO.');
+      setFormError('Add a goal name and a target amount above zero.');
       return;
     }
     if (!Number.isFinite(current) || current < 0 || current > target) {
-      Alert.alert('INVALID SAVINGS', 'CURRENT SAVINGS MUST BE BETWEEN ZERO AND THE TARGET.');
+      setFormError('Current savings must be between zero and the target.');
       return;
     }
     if (!Number.isFinite(minimum) || minimum < 0) {
-      Alert.alert('INVALID MINIMUM', 'MINIMUM CONTRIBUTION MUST BE ZERO OR POSITIVE.');
+      setFormError('Minimum contribution must be zero or positive.');
       return;
     }
     if (!targetDate || Number.isNaN(deadline.getTime())) {
-      Alert.alert('INVALID DATE', 'USE YYYY-MM-DD FOR THE TARGET DATE.');
+      setFormError('Choose a valid target date.');
       return;
     }
 
-    await addGoal({
-      name: name.trim(),
-      targetAmount: target,
-      currentAmount: current,
-      targetDate,
-      priority,
-      category,
-      minimumMonthlyContribution: minimum,
-      deadlineType,
-    });
-    setName('');
-    setTargetAmount('');
-    setCurrentAmount('');
-    setTargetDate('');
-    setPriority('Important');
-    setCategory('Custom');
-    setMinimumContribution('');
-    setDeadlineType('Fixed');
+    setSavingGoal(true);
+    try {
+      await addGoal({
+        name: name.trim(),
+        targetAmount: target,
+        currentAmount: current,
+        targetDate,
+        priority,
+        category,
+        minimumMonthlyContribution: minimum,
+        deadlineType,
+      });
+      setName('');
+      setTargetAmount('');
+      setCurrentAmount('');
+      setTargetDate('');
+      setPriority('Important');
+      setCategory('Custom');
+      setMinimumContribution('');
+      setDeadlineType('Fixed');
+    } finally {
+      setSavingGoal(false);
+    }
+  };
+
+  const handleDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) setTargetDate(toDateValue(selectedDate));
   };
 
   return (
@@ -777,23 +813,19 @@ export default function GoalsScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.titleBar}>
-          <View>
-            <Text style={styles.windowCaption}>VECTORR / PLANNER</Text>
-            <Text style={styles.title}>FINANCIAL GOALS</Text>
-          </View>
-          <Text style={styles.windowMark}>[ GOALS ]</Text>
+          <Text style={styles.title}>GOALS</Text>
         </View>
 
         <View style={styles.budgetPanel}>
-          <Text style={styles.panelLabel}>AVAILABLE MONTHLY GOAL BUDGET</Text>
+          <Text style={styles.panelLabel}>AVAILABLE MONTHLY BUDGET</Text>
           <Text style={styles.panelValue}>
             {formatCurrency(availableGoalBudget)}
           </Text>
           <Text style={styles.panelMeta}>
-            {goals.length} ACTIVE GOAL{goals.length === 1 ? '' : 'S'} // EQUAL-SHARE MODEL
+            {goals.length} ACTIVE GOAL{goals.length === 1 ? '' : 'S'}
           </Text>
           <Text style={styles.assumptionText}>
-            PROJECTIONS USE {profile.expectedAnnualReturn}% ANNUAL RETURN, MONTHLY COMPOUNDING, AND NO FEES.
+            ASSUMES {profile.expectedAnnualReturn}% ANNUAL RETURN.
           </Text>
         </View>
 
@@ -806,22 +838,28 @@ export default function GoalsScreen() {
           onSaveReview={recordReview}
         />
 
-        <ConflictPanel conflicts={conflicts} />
+        <GoalDisclosure title={`CONFLICTS (${conflicts.length})`} expanded={showConflicts} onToggle={() => setShowConflicts((current) => !current)}>
+          <ConflictPanel conflicts={conflicts} />
+        </GoalDisclosure>
 
-        <RecommendationPanel recommendations={recommendations} />
+        <GoalDisclosure title={`TRADE-OFFS (${recommendations.length})`} expanded={showRecommendations} onToggle={() => setShowRecommendations((current) => !current)}>
+          <RecommendationPanel recommendations={recommendations} />
+        </GoalDisclosure>
 
-        <ScenarioPanel
-          results={scenarios}
-          selectedKey={scenarioKey}
-          onSelect={setScenarioKey}
-          conflicts={conflicts}
-          savedScenarios={savedScenarios}
-          onSave={handleSaveScenario}
-          onDelete={deleteScenario}
-        />
+        <GoalDisclosure title="PRIORITY SCENARIOS" expanded={showScenarios} onToggle={() => setShowScenarios((current) => !current)}>
+          <ScenarioPanel
+            results={scenarios}
+            selectedKey={scenarioKey}
+            onSelect={setScenarioKey}
+            conflicts={conflicts}
+            savedScenarios={savedScenarios}
+            onSave={handleSaveScenario}
+            onDelete={deleteScenario}
+          />
+        </GoalDisclosure>
 
         <View style={styles.formPanel}>
-          <Text style={styles.sectionLabel}>NEW GOAL RECORD</Text>
+          <Text style={styles.sectionLabel}>NEW GOAL</Text>
           <GoalField
             label="GOAL NAME"
             placeholder="e.g. emergency fund"
@@ -830,18 +868,18 @@ export default function GoalsScreen() {
             textInput
           />
           <GoalField
-            label="TARGET AMOUNT / INR"
+            label="TARGET AMOUNT"
             placeholder="e.g. 300000"
             value={targetAmount}
             onChangeText={setTargetAmount}
           />
           <GoalField
-            label="CURRENT SAVINGS / INR"
+            label="CURRENT SAVINGS"
             placeholder="e.g. 50000"
             value={currentAmount}
             onChangeText={setCurrentAmount}
           />
-          <Text style={styles.fieldLabel}>GOAL CATEGORY</Text>
+          <Text style={styles.fieldLabel}>CATEGORY</Text>
           <View style={styles.priorityRow}>
             {GOAL_CATEGORIES.map((option) => (
               <Pressable
@@ -856,18 +894,36 @@ export default function GoalsScreen() {
             ))}
           </View>
           <GoalField
-            label="MINIMUM MONTHLY CONTRIBUTION / INR"
+            label="MIN. MONTHLY CONTRIBUTION"
             placeholder="e.g. 5000"
             value={minimumContribution}
             onChangeText={setMinimumContribution}
           />
-          <GoalField
-            label="TARGET DATE / YYYY-MM-DD"
-            placeholder="e.g. 2027-12-31"
-            value={targetDate}
-            onChangeText={setTargetDate}
-            textInput
-          />
+          <Text style={styles.fieldLabel}>TARGET DATE</Text>
+          {Platform.OS === 'web' ? (
+            <TextInput
+              style={styles.dateInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9B91B8"
+              value={targetDate}
+              onChangeText={setTargetDate}
+            />
+          ) : (
+            <>
+              <Pressable style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+                <Text style={styles.dateButtonText}>
+                  {targetDate ? formatGoalDate(new Date(`${targetDate}T00:00:00`)) : 'SET DATE'}
+                </Text>
+              </Pressable>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={targetDate ? new Date(`${targetDate}T00:00:00`) : new Date()}
+                  mode="date"
+                  onChange={handleDateChange}
+                />
+              )}
+            </>
+          )}
           <Text style={styles.fieldLabel}>DEADLINE MODE</Text>
           <View style={styles.priorityRow}>
             {(['Fixed', 'Flexible'] as GoalDeadlineType[]).map((option) => (
@@ -904,18 +960,19 @@ export default function GoalsScreen() {
               </Pressable>
             ))}
           </View>
-          <Pressable style={styles.addButton} onPress={handleAdd}>
-            <Text style={styles.addText}>[ ADD GOAL ]</Text>
+          {!!formError && <Text style={styles.formError}>{formError}</Text>}
+          <Pressable style={[styles.addButton, savingGoal && styles.disabledButton]} onPress={handleAdd} disabled={savingGoal}>
+            <Text style={styles.addText}>{savingGoal ? '[ SAVING... ]' : '[ ADD GOAL ]'}</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>GOAL REGISTER</Text>
+        <Text style={styles.sectionLabel}>GOALS</Text>
         {goals.length === 0 ? (
           <View style={styles.emptyPanel}>
             <Text style={styles.emptyMark}>[ ? ]</Text>
-            <Text style={styles.emptyText}>NO GOALS REGISTERED</Text>
+            <Text style={styles.emptyText}>NO GOALS YET</Text>
             <Text style={styles.emptySubtext}>
-              ADD A GOAL TO START TESTING YOUR PLAN.
+              ADD ONE ABOVE TO GET STARTED
             </Text>
           </View>
         ) : (
@@ -976,7 +1033,12 @@ export default function GoalsScreen() {
                       {goal.priority.toUpperCase()} // DUE {goal.targetDate}
                     </Text>
                   </View>
-                  <Text style={[styles.goalStatus, status === 'AT RISK' && styles.riskStatus]}>
+                  <Text style={[
+                    styles.goalStatus,
+                    status === 'AT RISK' && styles.statusAtRisk,
+                    status === 'COMPLETE' && styles.statusComplete,
+                    status === 'SET BUDGET' && styles.statusBudget,
+                  ]}>
                     {status}
                   </Text>
                 </View>
@@ -986,19 +1048,19 @@ export default function GoalsScreen() {
                 <View style={styles.goalStats}>
                   <Text style={styles.goalStat}>{formatCurrency(goal.currentAmount)} SAVED</Text>
                   <Text style={styles.goalStat}>{Math.round(progress)}%</Text>
-                  <Text style={styles.goalStat}>{formatCurrency(projection.requiredMonthly)}/MO REQUIRED</Text>
+                  <Text style={styles.goalStat}>{formatCurrency(projection.requiredMonthly)}/MO</Text>
                 </View>
                 <View style={styles.analysisPanel}>
-                  <Text style={styles.analysisTitle}>FEASIBILITY ANALYSIS</Text>
-                  <AnalysisRow label="CURRENT EQUAL SHARE" value={`${formatCurrency(currentContribution)} / MO`} />
-                  <AnalysisRow label="ESTIMATED COMPLETION" value={formatProjectionDate(projection.completionDate)} />
-                  <AnalysisRow label="PROJECTED AT TARGET" value={formatCurrency(projection.projected)} />
+                  <Text style={styles.analysisTitle}>FEASIBILITY</Text>
+                  <AnalysisRow label="EQUAL SHARE" value={`${formatCurrency(currentContribution)} / MO`} />
+                  <AnalysisRow label="COMPLETION" value={formatProjectionDate(projection.completionDate)} />
+                  <AnalysisRow label="AT TARGET" value={formatCurrency(projection.projected)} />
                   <AnalysisRow
-                    label={projection.surplus >= 0 ? 'PROJECTED SURPLUS' : 'PROJECTED SHORTFALL'}
+                    label={projection.surplus >= 0 ? 'SURPLUS' : 'SHORTFALL'}
                     value={formatCurrency(Math.abs(projection.surplus))}
                     emphasis={projection.surplus < 0}
                   />
-                  <Text style={styles.sensitivityTitle}>SENSITIVITY // TARGET-DATE SURPLUS</Text>
+                  <Text style={styles.sensitivityTitle}>SENSITIVITY</Text>
                   {sensitivity.map((scenario) => (
                     <AnalysisRow
                       key={scenario.label}
@@ -1007,12 +1069,9 @@ export default function GoalsScreen() {
                       emphasis={scenario.value < 0}
                     />
                   ))}
-                  <Text style={styles.analysisNote}>
-                    REQUIRED = (TARGET - SAVED) / {projection.monthsToTarget} MONTHS. CURRENT SHARE = AVAILABLE BUDGET / {Math.max(goals.length, 1)} GOAL{goals.length === 1 ? '' : 'S'}.
-                  </Text>
                 </View>
                 <Pressable onPress={() => deleteGoal(goal.id)} style={styles.deleteButton}>
-                  <Text style={styles.deleteText}>[ DELETE RECORD ]</Text>
+                  <Text style={styles.deleteText}>[ DELETE ]</Text>
                 </Pressable>
               </View>
             );
@@ -1036,6 +1095,16 @@ function GoalField({
   onChangeText: (value: string) => void;
   textInput?: boolean;
 }) {
+  const handleChange = (value: string) => {
+    if (textInput) {
+      onChangeText(value);
+      return;
+    }
+    const normalized = value.replace(/[^0-9.]/g, '');
+    const [whole, decimal] = normalized.split('.');
+    const formattedWhole = whole ? Number(whole).toLocaleString('en-IN') : '';
+    onChangeText(decimal === undefined ? formattedWhole : `${formattedWhole}.${decimal.slice(0, 2)}`);
+  };
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -1047,7 +1116,7 @@ function GoalField({
           placeholder={placeholder}
           placeholderTextColor="#9B91B8"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={handleChange}
         />
       </View>
     </View>
@@ -1121,6 +1190,10 @@ const styles = StyleSheet.create({
   dashboardProgressFill: { height: '100%', backgroundColor: '#00C7AD' },
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusCount: { color: '#008F7D', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
+  statusAtRisk: { color: '#A45A00' },
+  statusUnrealistic: { color: '#C52757' },
+  statusComplete: { color: '#008F7D' },
+  statusBudget: { color: '#A45A00' },
   dashboardSection: { borderTopWidth: 1, borderTopColor: '#E1DAF1', paddingTop: 8, gap: 5 },
   dashboardSectionTitle: { color: '#D6009A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   dashboardMuted: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, lineHeight: 12 },
@@ -1171,6 +1244,10 @@ const styles = StyleSheet.create({
   recommendationButtonText: { color: '#201A33', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   recommendationClear: { color: '#008F7D', fontFamily: 'monospace', fontSize: 9 },
   recommendationNote: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, lineHeight: 12 },
+  goalDisclosure: { marginTop: 2, gap: 6 },
+  goalDisclosureToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', paddingHorizontal: 12, paddingVertical: 10 },
+  goalDisclosureTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  goalDisclosureIcon: { color: '#D6009A', fontFamily: 'monospace', fontSize: 18, fontWeight: '700' },
   formPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, gap: 8 },
   sectionLabel: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', color: '#D6009A', marginTop: 10, marginBottom: 2 },
   field: { gap: 5 },
@@ -1178,6 +1255,11 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 3, borderLeftColor: '#00F5D4', paddingHorizontal: 12, minHeight: 46 },
   currencySymbol: { color: '#008F7D', fontFamily: 'monospace', fontSize: 18, fontWeight: '700', marginRight: 6 },
   input: { flex: 1, color: '#201A33', fontFamily: 'monospace', fontSize: 15, outlineStyle: 'none' as any },
+  dateButton: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 3, borderLeftColor: '#00F5D4', minHeight: 46, justifyContent: 'center', paddingHorizontal: 12 },
+  dateButtonText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 12, fontWeight: '700' },
+  dateInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 3, borderLeftColor: '#00F5D4', color: '#201A33', fontFamily: 'monospace', fontSize: 15, minHeight: 46, paddingHorizontal: 12 },
+  formError: { color: '#C52757', fontFamily: 'monospace', fontSize: 9, lineHeight: 13, marginTop: 3 },
+  disabledButton: { opacity: 0.55 },
   priorityRow: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
   priorityChip: { borderWidth: 1, borderColor: '#B8AEDB', paddingHorizontal: 10, paddingVertical: 8 },
   priorityChipSelected: { backgroundColor: '#FF4FD8', borderColor: '#00F5D4' },

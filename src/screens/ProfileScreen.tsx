@@ -48,6 +48,8 @@ export default function ProfileScreen() {
   const [dataText, setDataText] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [formError, setFormError] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     setValues(profileToStrings(profile));
@@ -73,13 +75,13 @@ export default function ProfileScreen() {
   const warnings = useMemo(() => {
     const next: string[] = [];
     if (profile.goalContributionBudget > availableGoalBudget && profile.goalContributionBudget > 0) {
-      next.push('PLANNED GOAL BUDGET EXCEEDS YOUR CALCULATED AVAILABLE BUDGET.');
+      next.push('GOAL BUDGET EXCEEDS AVAILABLE.');
     }
-    if (debtRatio > 36) next.push('DEBT PAYMENTS ARE ABOVE THE 36% INCOME GUIDELINE.');
+    if (debtRatio > 36) next.push('DEBT ABOVE 36% OF INCOME.');
     if (profile.emergencyFundTarget > profile.currentSavings) {
-      next.push('EMERGENCY FUND IS BELOW ITS TARGET.');
+      next.push('EMERGENCY FUND BELOW TARGET.');
     }
-    if (monthlySurplus < 0) next.push('CURRENT MONTHLY CASH FLOW IS NEGATIVE.');
+    if (monthlySurplus < 0) next.push('MONTHLY CASH FLOW IS NEGATIVE.');
     return next;
   }, [availableGoalBudget, debtRatio, monthlySurplus, profile]);
 
@@ -91,6 +93,7 @@ export default function ProfileScreen() {
     value.trim() === '' ? 0 : Number.parseFloat(value);
 
   const handleSave = async () => {
+    setFormError('');
     const parsed: FinancialProfile = {
       monthlyIncome: parseValue(values.monthlyIncome),
       currentSavings: parseValue(values.currentSavings),
@@ -104,16 +107,21 @@ export default function ProfileScreen() {
       expenseGrowthRate: parseValue(values.expenseGrowthRate),
     };
     if (Object.values(parsed).some((value) => !Number.isFinite(value) || value < 0)) {
-      Alert.alert('INVALID PROFILE', 'ENTER ZERO OR A POSITIVE NUMBER IN EVERY FIELD.');
+      setFormError('Enter zero or a positive number in every field.');
       return;
     }
-    await updateProfile(parsed);
-    Alert.alert('PROFILE SAVED', 'YOUR LOCAL FINANCIAL PROFILE IS UPDATED.');
+    setSavingProfile(true);
+    try {
+      await updateProfile(parsed);
+      Alert.alert('PROFILE SAVED', 'PROFILE UPDATED.');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleExport = () => {
     setDataText(JSON.stringify(profile, null, 2));
-    Alert.alert('EXPORT READY', 'YOUR PROFILE JSON IS READY TO COPY OR STORE LOCALLY.');
+    Alert.alert('EXPORT READY', 'JSON READY TO COPY.');
   };
 
   const handleImport = async () => {
@@ -125,14 +133,14 @@ export default function ProfileScreen() {
       }
       await updateProfile(next);
       setDataText('');
-      Alert.alert('IMPORT COMPLETE', 'THE LOCAL PROFILE WAS RESTORED.');
+      Alert.alert('IMPORT COMPLETE', 'PROFILE RESTORED.');
     } catch {
-      Alert.alert('IMPORT FAILED', 'PASTE A VALID PROFILE JSON OBJECT.');
+      Alert.alert('IMPORT FAILED', 'INVALID JSON.');
     }
   };
 
   const handleClear = () => {
-    Alert.alert('CLEAR PROFILE DATA', 'RESET PROFILE VALUES WITHOUT DELETING EXPENSES OR GOALS?', [
+    Alert.alert('CLEAR PROFILE DATA', 'RESET PROFILE VALUES? EXPENSES & GOALS STAY.', [
       { text: 'CANCEL', style: 'cancel' },
       {
         text: 'CLEAR',
@@ -140,7 +148,7 @@ export default function ProfileScreen() {
         onPress: async () => {
           await updateProfile(DEFAULT_FINANCIAL_PROFILE);
           setDataText('');
-          Alert.alert('PROFILE CLEARED', 'PROFILE VALUES ARE BACK TO DEFAULTS.');
+          Alert.alert('PROFILE CLEARED', 'RESET TO DEFAULTS.');
         },
       },
     ]);
@@ -149,15 +157,15 @@ export default function ProfileScreen() {
   const handleAuth = async (mode: 'signIn' | 'signUp') => {
     try {
       if (!authEmail.trim() || authPassword.length < 6) {
-        Alert.alert('INVALID AUTH DETAILS', 'ENTER AN EMAIL AND A PASSWORD OF AT LEAST 6 CHARACTERS.');
+        Alert.alert('INVALID DETAILS', 'EMAIL + 6-CHAR PASSWORD REQUIRED.');
         return;
       }
       if (mode === 'signIn') {
         await signIn(authEmail.trim(), authPassword);
-        Alert.alert('SIGNED IN', 'YOUR SUPABASE SESSION IS ACTIVE.');
+        Alert.alert('SIGNED IN', 'SESSION ACTIVE.');
       } else {
         await signUp(authEmail.trim(), authPassword);
-        Alert.alert('SIGN-UP COMPLETE', 'CHECK YOUR EMAIL IF CONFIRMATION IS REQUIRED.');
+        Alert.alert('SIGN-UP COMPLETE', 'CHECK EMAIL TO CONFIRM.');
       }
       setAuthPassword('');
     } catch (error) {
@@ -169,26 +177,22 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.titleBar}>
-          <View>
-            <Text style={styles.windowCaption}>VECTORR / CONTROL PANEL</Text>
-            <Text style={styles.title}>FINANCIAL PROFILE</Text>
-          </View>
-          <Text style={styles.windowMark}>[ LOCAL ]</Text>
+          <Text style={styles.title}>PROFILE</Text>
         </View>
 
         <View style={styles.localPanel}>
-          <Text style={styles.localTitle}>LOCAL-ONLY FINANCIAL DATA</Text>
-          <Text style={styles.localText}>STORED ON THIS DEVICE // NO CLOUD SYNC ENABLED</Text>
+          <Text style={styles.localTitle}>LOCAL DATA</Text>
+          <Text style={styles.localText}>STORED ON THIS DEVICE</Text>
         </View>
 
         <View style={styles.authPanel}>
           <View style={styles.authHeader}>
-            <Text style={styles.localTitle}>SUPABASE ACCOUNT</Text>
+            <Text style={styles.localTitle}>ACCOUNT</Text>
             <Text style={styles.authCode}>{authEnabled ? 'CLOUD READY' : 'LOCAL MODE'}</Text>
           </View>
           {!authEnabled ? (
             <Text style={styles.localText}>
-              ADD EXPO_PUBLIC_SUPABASE_URL AND EXPO_PUBLIC_SUPABASE_ANON_KEY TO ENABLE OPTIONAL CLOUD AUTH.
+              CLOUD SYNC NOT CONFIGURED.
             </Text>
           ) : authLoading ? (
             <Text style={styles.localText}>CHECKING SESSION...</Text>
@@ -228,7 +232,7 @@ export default function ProfileScreen() {
                   <Text style={styles.authButtonText}>[ SIGN IN ]</Text>
                 </Pressable>
                 <Pressable style={styles.authSecondaryButton} onPress={() => handleAuth('signUp')}>
-                  <Text style={styles.authSecondaryText}>[ CREATE ACCOUNT ]</Text>
+                  <Text style={styles.authSecondaryText}>[ SIGN UP ]</Text>
                 </Pressable>
               </View>
             </>
@@ -236,10 +240,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statusPanel}>
-          <Text style={styles.statusLabel}>CALCULATED AVAILABLE GOAL BUDGET</Text>
+          <Text style={styles.statusLabel}>AVAILABLE GOAL BUDGET</Text>
           <Text style={styles.statusValue}>{formatCurrency(availableGoalBudget)}</Text>
           <Text style={styles.statusMeta}>
-            INCOME - EXPENSES - DEBT - 12-MONTH EMERGENCY TOP-UP
+            AFTER EXPENSES, DEBT & EMERGENCY FUND
           </Text>
         </View>
 
@@ -252,52 +256,53 @@ export default function ProfileScreen() {
 
         {warnings.length > 0 && (
           <View style={styles.warningPanel}>
-            <Text style={styles.warningTitle}>ATTENTION REQUIRED</Text>
+            <Text style={styles.warningTitle}>ATTENTION</Text>
             {warnings.map((warning) => (
               <Text key={warning} style={styles.warningText}>! {warning}</Text>
             ))}
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>CORE RESOURCES</Text>
-        <ProfileField label="MONTHLY INCOME / INR" placeholder="e.g. 75000" value={values.monthlyIncome} onChangeText={(value) => updateValue('monthlyIncome', value)} />
-        <ProfileField label="CURRENT SAVINGS / INR" placeholder="e.g. 150000" value={values.currentSavings} onChangeText={(value) => updateValue('currentSavings', value)} />
+        <Text style={styles.sectionLabel}>INCOME & SAVINGS</Text>
+        <ProfileField label="MONTHLY INCOME" placeholder="e.g. 75000" value={values.monthlyIncome} onChangeText={(value) => updateValue('monthlyIncome', value)} />
+        <ProfileField label="CURRENT SAVINGS" placeholder="e.g. 150000" value={values.currentSavings} onChangeText={(value) => updateValue('currentSavings', value)} />
 
-        <Text style={styles.sectionLabel}>COMMITMENTS AND PLAN</Text>
-        <ProfileField label="MONTHLY DEBT PAYMENTS / INR" placeholder="e.g. 12000" value={values.monthlyDebtPayments} onChangeText={(value) => updateValue('monthlyDebtPayments', value)} />
-        <ProfileField label="EMERGENCY FUND TARGET / INR" placeholder="e.g. 300000" value={values.emergencyFundTarget} onChangeText={(value) => updateValue('emergencyFundTarget', value)} />
-        <ProfileField label="PLANNED GOAL BUDGET / INR" placeholder="e.g. 20000" value={values.goalContributionBudget} onChangeText={(value) => updateValue('goalContributionBudget', value)} />
-        <ProfileField label="ACTUAL GOAL CONTRIBUTIONS / INR" placeholder="e.g. 15000" value={values.actualMonthlyGoalContributions} onChangeText={(value) => updateValue('actualMonthlyGoalContributions', value)} />
+        <Text style={styles.sectionLabel}>COMMITMENTS</Text>
+        <ProfileField label="MONTHLY DEBT" placeholder="e.g. 12000" value={values.monthlyDebtPayments} onChangeText={(value) => updateValue('monthlyDebtPayments', value)} />
+        <ProfileField label="EMERGENCY FUND TARGET" placeholder="e.g. 300000" value={values.emergencyFundTarget} onChangeText={(value) => updateValue('emergencyFundTarget', value)} />
+        <ProfileField label="PLANNED GOAL BUDGET" placeholder="e.g. 20000" value={values.goalContributionBudget} onChangeText={(value) => updateValue('goalContributionBudget', value)} />
+        <ProfileField label="ACTUAL CONTRIBUTIONS" placeholder="e.g. 15000" value={values.actualMonthlyGoalContributions} onChangeText={(value) => updateValue('actualMonthlyGoalContributions', value)} />
 
-        <Text style={styles.sectionLabel}>PLANNING ASSUMPTIONS / PERCENT</Text>
-        <ProfileField label="INFLATION RATE / %" placeholder="e.g. 6" value={values.inflationRate} onChangeText={(value) => updateValue('inflationRate', value)} unit="%" />
-        <ProfileField label="EXPECTED ANNUAL RETURN / %" placeholder="e.g. 10" value={values.expectedAnnualReturn} onChangeText={(value) => updateValue('expectedAnnualReturn', value)} unit="%" />
-        <ProfileField label="ANNUAL INCOME GROWTH / %" placeholder="e.g. 5" value={values.incomeGrowthRate} onChangeText={(value) => updateValue('incomeGrowthRate', value)} unit="%" />
-        <ProfileField label="ANNUAL EXPENSE GROWTH / %" placeholder="e.g. 6" value={values.expenseGrowthRate} onChangeText={(value) => updateValue('expenseGrowthRate', value)} unit="%" />
+        <Text style={styles.sectionLabel}>ASSUMPTIONS</Text>
+        <ProfileField label="INFLATION RATE" placeholder="e.g. 6" value={values.inflationRate} onChangeText={(value) => updateValue('inflationRate', value)} unit="%" />
+        <ProfileField label="EXPECTED RETURN" placeholder="e.g. 10" value={values.expectedAnnualReturn} onChangeText={(value) => updateValue('expectedAnnualReturn', value)} unit="%" />
+        <ProfileField label="INCOME GROWTH" placeholder="e.g. 5" value={values.incomeGrowthRate} onChangeText={(value) => updateValue('incomeGrowthRate', value)} unit="%" />
+        <ProfileField label="EXPENSE GROWTH" placeholder="e.g. 6" value={values.expenseGrowthRate} onChangeText={(value) => updateValue('expenseGrowthRate', value)} unit="%" />
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveText}>[ SAVE PROFILE ]</Text>
+        {!!formError && <Text style={styles.formError}>{formError}</Text>}
+        <Pressable style={[styles.saveButton, savingProfile && styles.disabledButton]} onPress={handleSave} disabled={savingProfile}>
+          <Text style={styles.saveText}>{savingProfile ? '[ SAVING... ]' : '[ SAVE ]'}</Text>
         </Pressable>
 
         <View style={styles.reviewPanel}>
-          <Text style={styles.reviewTitle}>MONTHLY REVIEW // CURRENT MONTH</Text>
-          <ReviewRow label="ACTUAL INCOME" value={formatCurrency(profile.monthlyIncome)} />
-          <ReviewRow label="ACTUAL EXPENSES" value={formatCurrency(monthlyExpenses)} />
-          <ReviewRow label="ACTUAL SURPLUS" value={formatCurrency(monthlySurplus)} />
-          <ReviewRow label="PLANNED GOAL BUDGET" value={formatCurrency(profile.goalContributionBudget)} />
-          <ReviewRow label="ACTUAL GOAL CONTRIBUTIONS" value={formatCurrency(profile.actualMonthlyGoalContributions)} />
+          <Text style={styles.reviewTitle}>THIS MONTH</Text>
+          <ReviewRow label="INCOME" value={formatCurrency(profile.monthlyIncome)} />
+          <ReviewRow label="EXPENSES" value={formatCurrency(monthlyExpenses)} />
+          <ReviewRow label="SURPLUS" value={formatCurrency(monthlySurplus)} />
+          <ReviewRow label="GOAL BUDGET" value={formatCurrency(profile.goalContributionBudget)} />
+          <ReviewRow label="GOAL CONTRIBUTIONS" value={formatCurrency(profile.actualMonthlyGoalContributions)} />
           <ReviewRow label="PLAN VS ACTUAL" value={`${contributionDelta >= 0 ? '+' : ''}${formatCurrency(contributionDelta)}`} />
           <ReviewRow label="AVAILABLE VS PLAN" value={`${budgetDelta >= 0 ? '+' : ''}${formatCurrency(budgetDelta)}`} />
         </View>
 
         <View style={styles.dataPanel}>
-          <Text style={styles.reviewTitle}>PROFILE DATA CONTROLS</Text>
+          <Text style={styles.reviewTitle}>DATA</Text>
           <TextInput
             style={styles.dataInput}
             multiline
             value={dataText}
             onChangeText={setDataText}
-            placeholder="Exported profile JSON appears here"
+            placeholder="Exported JSON appears here"
             placeholderTextColor="#9B91B8"
           />
           <View style={styles.dataButtons}>
@@ -429,6 +434,8 @@ const styles = StyleSheet.create({
   currencySymbol: { color: '#008F7D', fontFamily: 'monospace', fontSize: 18, fontWeight: '700', marginRight: 6 },
   input: { flex: 1, color: '#201A33', fontFamily: 'monospace', fontSize: 15, outlineStyle: 'none' as any },
   saveButton: { backgroundColor: '#FF4FD8', borderWidth: 2, borderColor: '#00F5D4', paddingVertical: 15, alignItems: 'center', marginTop: 18 },
+  formError: { color: '#C52757', fontFamily: 'monospace', fontSize: 9, lineHeight: 13, marginTop: 5 },
+  disabledButton: { opacity: 0.55 },
   saveText: { color: '#201A33', fontFamily: 'monospace', fontSize: 13, fontWeight: '700' },
   reviewPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, marginTop: 10, gap: 9 },
   reviewTitle: { fontFamily: 'monospace', fontSize: 10, fontWeight: '700', color: '#5B2DB8', marginBottom: 2 },

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -20,23 +19,38 @@ export default function AddExpenseScreen() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Category>('Food');
   const [note, setNote] = useState('');
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const formatAmount = (value: string) => {
+    const normalized = value.replace(/[^0-9.]/g, '');
+    const [whole, decimal] = normalized.split('.');
+    const formattedWhole = whole ? Number(whole).toLocaleString('en-IN') : '';
+    return decimal === undefined ? formattedWhole : `${formattedWhole}.${decimal.slice(0, 2)}`;
+  };
 
   const handleSubmit = async () => {
-    const parsed = parseFloat(amount);
+    setFormError('');
+    const parsed = parseFloat(amount.replace(/,/g, ''));
     if (!amount || isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid amount greater than 0.');
+      setFormError('Enter an amount greater than zero.');
       return;
     }
-    await addExpense({
-      amount: parsed,
-      category,
-      note: note.trim(),
-      date: new Date().toISOString(),
-    });
-    setAmount('');
-    setNote('');
-    setCategory('Food');
-    navigation.navigate('Home' as never);
+    setSaving(true);
+    try {
+      await addExpense({
+        amount: parsed,
+        category,
+        note: note.trim(),
+        date: new Date().toISOString(),
+      });
+      setAmount('');
+      setNote('');
+      setCategory('Food');
+      navigation.navigate('Home' as never);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -46,14 +60,11 @@ export default function AddExpenseScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.titleBar}>
-          <View>
-            <Text style={styles.windowCaption}>VECTORR / COMPOSE</Text>
-            <Text style={styles.title}>NEW LOG ENTRY</Text>
-          </View>
+          <Text style={styles.title}>ADD EXPENSE</Text>
           <Text style={styles.windowMark}>[ + ]</Text>
         </View>
 
-        <Text style={styles.label}>AMOUNT / INR</Text>
+        <Text style={styles.label}>AMOUNT</Text>
         <View style={styles.amountRow}>
           <Text style={styles.currencySymbol}>₹</Text>
           <TextInput
@@ -62,7 +73,7 @@ export default function AddExpenseScreen() {
             placeholder="0.00"
             placeholderTextColor="#9CA3AF"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(value) => setAmount(formatAmount(value))}
           />
         </View>
 
@@ -97,17 +108,18 @@ export default function AddExpenseScreen() {
           })}
         </View>
 
-        <Text style={styles.label}>NOTE (OPTIONAL)</Text>
+        <Text style={styles.label}>NOTE</Text>
         <TextInput
           style={styles.noteInput}
-          placeholder="e.g. coffee.exe"
+          placeholder="e.g. coffee"
           placeholderTextColor="#9CA3AF"
           value={note}
           onChangeText={setNote}
         />
 
-        <Pressable style={styles.submitBtn} onPress={handleSubmit}>
-          <Text style={styles.submitText}>[ SAVE ENTRY ]</Text>
+        {!!formError && <Text style={styles.formError}>{formError}</Text>}
+        <Pressable style={[styles.submitBtn, saving && styles.disabledButton]} onPress={handleSubmit} disabled={saving}>
+          <Text style={styles.submitText}>{saving ? '[ SAVING... ]' : '[ SAVE ]'}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -177,5 +189,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 28,
   },
+  formError: { color: '#C52757', fontFamily: 'monospace', fontSize: 10, lineHeight: 14, marginTop: 8 },
+  disabledButton: { opacity: 0.55 },
   submitText: { color: '#201A33', fontFamily: 'monospace', fontSize: 14, fontWeight: '700' },
 });

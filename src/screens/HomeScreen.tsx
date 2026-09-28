@@ -35,7 +35,7 @@ function CategoryFilter({
 }) {
   return (
     <View style={styles.filterPanel}>
-      <Text style={styles.filterLabel}>FILTER LOG // CATEGORY</Text>
+      <Text style={styles.filterLabel}>CATEGORY</Text>
       <View style={styles.filterRow}>
         {(['All', ...CATEGORIES] as const).map((category) => (
           <Pressable
@@ -138,10 +138,7 @@ function ExpenseCalendar({
   return (
     <View style={styles.calendar}>
       <View style={styles.calendarHeader}>
-        <View>
-          <Text style={styles.calendarCaption}>VECTORR / CALENDAR</Text>
-          <Text style={styles.calendarTitle}>{monthLabel.toUpperCase()}</Text>
-        </View>
+        <Text style={styles.calendarTitle}>{monthLabel.toUpperCase()}</Text>
         <View style={styles.calendarControls}>
           <Pressable
             onPress={() => shiftMonth(-1)}
@@ -160,7 +157,7 @@ function ExpenseCalendar({
         </View>
       </View>
       <View style={styles.monthSummary}>
-        <Text style={styles.monthSummaryLabel}>MONTHLY SPENDING</Text>
+        <Text style={styles.monthSummaryLabel}>SPENT</Text>
         <Text style={styles.monthSummaryValue}>{formatCurrency(monthlyTotal)}</Text>
       </View>
       <View style={styles.weekRow}>
@@ -222,9 +219,9 @@ function ExpenseCalendar({
           </Text>
         </View>
       ) : (
-        <Text style={styles.calendarHint}>TAP A DATE FOR DAILY TOTALS</Text>
+        <Text style={styles.calendarHint}>TAP A DATE FOR TOTALS</Text>
       )}
-      <Text style={styles.calendarLegend}>● EXPENSE // ◆ GOAL DEADLINE // MAGENTA = HIGH SPEND</Text>
+      <Text style={styles.calendarLegend}>● EXPENSE   ◆ GOAL DUE   HIGHLIGHT = HIGH SPEND</Text>
     </View>
   );
 }
@@ -266,6 +263,28 @@ function ExpenseRow({
   );
 }
 
+function CollapsibleSection({
+  title,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.collapsibleSection}>
+      <Pressable onPress={onToggle} style={styles.collapsibleToggle} accessibilityRole="button">
+        <Text style={styles.collapsibleTitle}>{title}</Text>
+        <Text style={styles.collapsibleIcon}>{expanded ? '−' : '+'}</Text>
+      </Pressable>
+      {expanded && children}
+    </View>
+  );
+}
+
 function CategoryBreakdown({
   expenses,
   total,
@@ -295,14 +314,10 @@ function CategoryBreakdown({
   return (
     <View style={styles.breakdown}>
       <View style={styles.breakdownHeader}>
-        <View>
-          <Text style={styles.breakdownCaption}>VECTORR / ARCHIVE</Text>
-          <Text style={styles.breakdownTitle}>SYSTEM BREAKDOWN</Text>
-        </View>
-        <Text style={styles.breakdownCode}>STATS.EXE</Text>
+        <Text style={styles.breakdownTitle}>BREAKDOWN</Text>
       </View>
       {byCategory.length === 0 ? (
-        <Text style={styles.breakdownEmpty}>NO CATEGORY DATA YET</Text>
+        <Text style={styles.breakdownEmpty}>NO DATA YET</Text>
       ) : (
         byCategory.map(({ category, amount }) => {
           const pct = total > 0 ? amount / total : 0;
@@ -337,40 +352,49 @@ function CategoryBreakdown({
 export default function HomeScreen() {
   const { expenses, goals = [], loading, deleteExpense } = useExpenses();
   const [categoryFilter, setCategoryFilter] = useState<Category | 'All'>('All');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const visibleExpenses = useMemo(
-    () =>
-      categoryFilter === 'All'
-        ? expenses
-        : expenses.filter((expense) => expense.category === categoryFilter),
+    () => [...(categoryFilter === 'All' ? expenses : expenses.filter((expense) => expense.category === categoryFilter))]
+      .sort((left, right) => Date.parse(right.date) - Date.parse(left.date)),
     [categoryFilter, expenses]
   );
   const visibleTotal = useMemo(
     () => visibleExpenses.reduce((sum, expense) => sum + expense.amount, 0),
     [visibleExpenses]
   );
+  const monthlyTotal = useMemo(() => {
+    const now = new Date();
+    return visibleExpenses
+      .filter((expense) => {
+        const date = new Date(expense.date);
+        return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+      })
+      .reduce((sum, expense) => sum + expense.amount, 0);
+  }, [visibleExpenses]);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.windowChrome}>
-          <Text style={styles.windowTitle}>PERSONAL FINANCE // 2001</Text>
-          <Text style={styles.windowControls}>[ _ ] [ x ]</Text>
-        </View>
-        <View style={styles.headerTopline}>
-          <Text style={styles.headerLabel}>VECTORR.EXE / HOME + STATS</Text>
-          <Text style={styles.headerStatus}>● ONLINE</Text>
+          <Text style={styles.windowTitle}>VECTORR</Text>
+          <Text style={styles.windowControls}>● ONLINE</Text>
         </View>
         <Text style={styles.headerLabel}>TOTAL SPENT</Text>
         <Text style={styles.headerTotal}>{formatCurrency(visibleTotal)}</Text>
         <Text style={styles.headerCount}>
-          {visibleExpenses.length} expense{visibleExpenses.length === 1 ? '' : 's'} logged
-          {categoryFilter === 'All' ? ' // INR' : ` // ${categoryFilter.toUpperCase()}`}
+          {visibleExpenses.length} logged
+          {categoryFilter === 'All' ? '' : ` // ${categoryFilter.toUpperCase()}`}
         </Text>
+        <View style={styles.headerMonthly}>
+          <Text style={styles.headerMonthlyLabel}>THIS MONTH</Text>
+          <Text style={styles.headerMonthlyValue}>{formatCurrency(monthlyTotal)}</Text>
+        </View>
       </View>
 
       {loading ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>LOADING_...</Text>
+          <Text style={styles.emptyText}>LOADING...</Text>
         </View>
       ) : (
         <FlatList
@@ -380,7 +404,12 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <View>
               <CategoryFilter selected={categoryFilter} onSelect={setCategoryFilter} />
-              <ExpenseCalendar expenses={visibleExpenses} goals={goals} />
+              <CollapsibleSection title="CALENDAR" expanded={showCalendar} onToggle={() => setShowCalendar((current) => !current)}>
+                <ExpenseCalendar expenses={visibleExpenses} goals={goals} />
+              </CollapsibleSection>
+              <CollapsibleSection title="BREAKDOWN" expanded={showBreakdown} onToggle={() => setShowBreakdown((current) => !current)}>
+                <CategoryBreakdown expenses={visibleExpenses} total={visibleTotal} />
+              </CollapsibleSection>
             </View>
           }
           ListEmptyComponent={
@@ -388,12 +417,9 @@ export default function HomeScreen() {
               <Text style={styles.emptyEmoji}>[ $$$ ]</Text>
               <Text style={styles.emptyText}>NO EXPENSES YET</Text>
               <Text style={styles.emptySubtext}>
-                USE THE ADD TAB TO CREATE YOUR FIRST LOG
+                TAP + TO ADD ONE
               </Text>
             </View>
-          }
-          ListFooterComponent={
-            <CategoryBreakdown expenses={visibleExpenses} total={visibleTotal} />
           }
           renderItem={({ item }) => (
             <ExpenseRow expense={item} onDelete={deleteExpense} />
@@ -429,13 +455,20 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   windowTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  windowControls: { color: '#D6009A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  windowControls: { color: '#008F7D', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
   headerTopline: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 26 },
   headerLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 12, fontWeight: '700' },
   headerStatus: { color: '#008F7D', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
   headerTotal: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 38, fontWeight: '700', marginTop: 6 },
   headerCount: { color: '#D6009A', fontFamily: 'monospace', fontSize: 12, marginTop: 8 },
+  headerMonthly: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderTopColor: '#B8AEDB', marginTop: 12, paddingTop: 10 },
+  headerMonthlyLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  headerMonthlyValue: { color: '#008F7D', fontFamily: 'monospace', fontSize: 17, fontWeight: '700' },
   list: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16, gap: 12 },
+  collapsibleSection: { marginBottom: 8 },
+  collapsibleToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', paddingHorizontal: 12, paddingVertical: 10 },
+  collapsibleTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
+  collapsibleIcon: { color: '#D6009A', fontFamily: 'monospace', fontSize: 18, fontWeight: '700' },
   filterPanel: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, marginBottom: 10 },
   filterLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700', marginBottom: 8 },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
