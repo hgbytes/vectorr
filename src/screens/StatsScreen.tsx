@@ -75,7 +75,7 @@ export default function StatsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F6FF' },
-  content: { padding: 24, gap: 4 },
+  content: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 20, gap: 4, paddingBottom: 32 },
   titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   windowCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
   title: { fontFamily: 'monospace', fontSize: 21, fontWeight: '700', color: '#201A33' },

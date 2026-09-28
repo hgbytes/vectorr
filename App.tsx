@@ -6,14 +6,16 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ExpensesProvider } from './src/ExpensesContext';
 import HomeScreen from './src/screens/HomeScreen';
 import AddExpenseScreen from './src/screens/AddExpenseScreen';
-import StatsScreen from './src/screens/StatsScreen';
+import GoalsScreen from './src/screens/GoalsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS: Record<string, string> = {
   Home: '⌂',
   Add: '+',
-  Stats: '▦',
+  Goals: '◈',
+  Profile: '◎',
 };
 
 export default function App() {
@@ -35,7 +37,8 @@ export default function App() {
         >
           <Tab.Screen name="Home" component={HomeScreen} />
           <Tab.Screen name="Add" component={AddExpenseScreen} />
-          <Tab.Screen name="Stats" component={StatsScreen} />
+          <Tab.Screen name="Goals" component={GoalsScreen} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
       </NavigationContainer>
       <StatusBar style="dark" />
@@ -45,14 +48,16 @@ export default function App() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 72,
-    paddingTop: 8,
-    paddingBottom: 10,
+    height: 68,
+    paddingTop: 6,
+    paddingBottom: 8,
     backgroundColor: '#F4F0FF',
     borderTopColor: '#00F5D4',
     borderTopWidth: 2,
+    width: '100%',
+    alignSelf: 'center',
   },
-  tabItem: { paddingHorizontal: 8 },
-  tabIcon: { fontFamily: 'monospace', fontSize: 22, fontWeight: '700' },
-  tabLabel: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
+  tabItem: { flex: 1, minWidth: 0, paddingHorizontal: 2 },
+  tabIcon: { fontFamily: 'monospace', fontSize: 20, fontWeight: '700' },
+  tabLabel: { fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
 });

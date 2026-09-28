@@ -41,7 +41,10 @@ export default function AddExpenseScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.titleBar}>
           <View>
             <Text style={styles.windowCaption}>VECTORR / COMPOSE</Text>
@@ -113,7 +116,7 @@ export default function AddExpenseScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F6FF' },
-  content: { padding: 24, gap: 8 },
+  content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 20, gap: 8, paddingBottom: 32 },
   titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   windowCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
   title: { fontFamily: 'monospace', fontSize: 22, fontWeight: '700', color: '#201A33' },
