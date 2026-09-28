@@ -5,20 +5,29 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import type { User } from '@supabase/supabase-js';
 import {
   DEFAULT_FINANCIAL_PROFILE,
   Expense,
   FinancialGoal,
   FinancialProfile,
+  GoalScenario,
+  ProgressSnapshot,
 } from './types';
 import {
   loadExpenses,
   loadFinancialProfile,
   loadGoals,
+  loadProgressSnapshot,
+  loadGoalScenarios,
   saveExpenses,
   saveFinancialProfile,
   saveGoals,
+  saveProgressSnapshot,
+  saveGoalScenarios,
 } from './storage';
+import { isSupabaseConfigured, supabase } from './supabase';
+import { syncUserData } from './sync';
 
 interface ExpensesContextValue {
   expenses: Expense[];
@@ -30,7 +39,22 @@ interface ExpensesContextValue {
   updateProfile: (profile: FinancialProfile) => Promise<void>;
   goals: FinancialGoal[];
   addGoal: (goal: Omit<FinancialGoal, 'id'>) => Promise<void>;
+  updateGoal: (
+    id: string,
+    changes: Partial<Omit<FinancialGoal, 'id'>>
+  ) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
+  scenarios: GoalScenario[];
+  saveScenario: (scenario: Omit<GoalScenario, 'id' | 'createdAt'>) => Promise<void>;
+  deleteScenario: (id: string) => Promise<void>;
+  authUser: User | null;
+  authLoading: boolean;
+  authEnabled: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  lastReview: ProgressSnapshot | null;
+  recordReview: (snapshot: ProgressSnapshot) => Promise<void>;
 }
 
 const ExpensesContext = createContext<ExpensesContextValue | undefined>(
@@ -43,23 +67,95 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     DEFAULT_FINANCIAL_PROFILE
   );
   const [goals, setGoals] = useState<FinancialGoal[]>([]);
+  const [lastReview, setLastReview] = useState<ProgressSnapshot | null>(null);
+  const [scenarios, setScenarios] = useState<GoalScenario[]>([]);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([loadExpenses(), loadFinancialProfile(), loadGoals()]).then(
-      ([expenseData, profileData, goalData]) => {
+    Promise.all([
+      loadExpenses(),
+      loadFinancialProfile(),
+      loadGoals(),
+      loadProgressSnapshot(),
+      loadGoalScenarios(),
+    ]).then(
+      ([expenseData, profileData, goalData, reviewData, scenarioData]) => {
         setExpenses(expenseData);
         setProfile(profileData);
         setGoals(goalData);
+        setLastReview(reviewData);
+        setScenarios(scenarioData);
         setLoading(false);
       }
     );
+  }, []);
+
+  useEffect(() => {
+    if (!authUser || loading) return;
+    let active = true;
+    syncUserData(authUser.id, {
+      expenses,
+      profile,
+      goals,
+      scenarios,
+      review: lastReview,
+    })
+      .then(async (merged) => {
+        if (!active) return;
+        setExpenses(merged.expenses);
+        setProfile(merged.profile);
+        setGoals(merged.goals);
+        setScenarios(merged.scenarios);
+        setLastReview(merged.review);
+        await Promise.all([
+          saveExpenses(merged.expenses),
+          saveFinancialProfile(merged.profile),
+          saveGoals(merged.goals),
+          saveGoalScenarios(merged.scenarios),
+          merged.review ? saveProgressSnapshot(merged.review) : Promise.resolve(),
+        ]);
+      })
+      .catch(() => {
+        // Local data remains available when the cloud is offline or not migrated.
+      });
+    return () => {
+      active = false;
+    };
+  }, [authUser, loading]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setAuthUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const addExpense = async (expense: Omit<Expense, 'id'>) => {
     const newExpense: Expense = {
       ...expense,
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      updatedAt: new Date().toISOString(),
     };
     const next = [newExpense, ...expenses];
     setExpenses(next);
@@ -73,16 +169,31 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateProfile = async (nextProfile: FinancialProfile) => {
-    setProfile(nextProfile);
-    await saveFinancialProfile(nextProfile);
+    const updated = { ...nextProfile, updatedAt: new Date().toISOString() };
+    setProfile(updated);
+    await saveFinancialProfile(updated);
   };
 
   const addGoal = async (goal: Omit<FinancialGoal, 'id'>) => {
     const newGoal: FinancialGoal = {
       ...goal,
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      updatedAt: new Date().toISOString(),
     };
     const next = [newGoal, ...goals];
+    setGoals(next);
+    await saveGoals(next);
+  };
+
+  const updateGoal = async (
+    id: string,
+    changes: Partial<Omit<FinancialGoal, 'id'>>
+  ) => {
+    const next = goals.map((goal) =>
+      goal.id === id
+        ? { ...goal, ...changes, updatedAt: new Date().toISOString() }
+        : goal
+    );
     setGoals(next);
     await saveGoals(next);
   };
@@ -91,6 +202,54 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     const next = goals.filter((goal) => goal.id !== id);
     setGoals(next);
     await saveGoals(next);
+  };
+
+  const recordReview = async (snapshot: ProgressSnapshot) => {
+    const updated = {
+      ...snapshot,
+      id: snapshot.id ?? 'current',
+      updatedAt: new Date().toISOString(),
+    };
+    setLastReview(updated);
+    await saveProgressSnapshot(updated);
+  };
+
+  const saveScenario = async (
+    scenario: Omit<GoalScenario, 'id' | 'createdAt'>
+  ) => {
+    const saved: GoalScenario = {
+      ...scenario,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const next = [saved, ...scenarios];
+    setScenarios(next);
+    await saveGoalScenarios(next);
+  };
+
+  const deleteScenario = async (id: string) => {
+    const next = scenarios.filter((scenario) => scenario.id !== id);
+    setScenarios(next);
+    await saveGoalScenarios(next);
+  };
+
+  const signIn = async (email: string, password: string) => {
+    if (!supabase) throw new Error('Supabase is not configured.');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  };
+
+  const signUp = async (email: string, password: string) => {
+    if (!supabase) throw new Error('Supabase is not configured.');
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+  };
+
+  const signOut = async () => {
+    if (!supabase) throw new Error('Supabase is not configured.');
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   const total = useMemo(
@@ -110,7 +269,19 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         goals,
         addGoal,
+        updateGoal,
         deleteGoal,
+        lastReview,
+        recordReview,
+        scenarios,
+        saveScenario,
+        deleteScenario,
+        authUser,
+        authLoading,
+        authEnabled: isSupabaseConfigured,
+        signIn,
+        signUp,
+        signOut,
       }}
     >
       {children}

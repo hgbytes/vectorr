@@ -31,9 +31,21 @@ function getMonthExpenses(expenses: { amount: number; date: string }[]) {
 }
 
 export default function ProfileScreen() {
-  const { profile, expenses, updateProfile } = useExpenses();
+  const {
+    profile,
+    expenses,
+    updateProfile,
+    authUser,
+    authLoading,
+    authEnabled,
+    signIn,
+    signUp,
+    signOut,
+  } = useExpenses();
   const [values, setValues] = useState(() => profileToStrings(profile));
   const [dataText, setDataText] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
 
   useEffect(() => {
     setValues(profileToStrings(profile));
@@ -132,6 +144,25 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleAuth = async (mode: 'signIn' | 'signUp') => {
+    try {
+      if (!authEmail.trim() || authPassword.length < 6) {
+        Alert.alert('INVALID AUTH DETAILS', 'ENTER AN EMAIL AND A PASSWORD OF AT LEAST 6 CHARACTERS.');
+        return;
+      }
+      if (mode === 'signIn') {
+        await signIn(authEmail.trim(), authPassword);
+        Alert.alert('SIGNED IN', 'YOUR SUPABASE SESSION IS ACTIVE.');
+      } else {
+        await signUp(authEmail.trim(), authPassword);
+        Alert.alert('SIGN-UP COMPLETE', 'CHECK YOUR EMAIL IF CONFIRMATION IS REQUIRED.');
+      }
+      setAuthPassword('');
+    } catch (error) {
+      Alert.alert('AUTH ERROR', error instanceof Error ? error.message : 'AUTHENTICATION FAILED.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -146,6 +177,55 @@ export default function ProfileScreen() {
         <View style={styles.localPanel}>
           <Text style={styles.localTitle}>LOCAL-ONLY FINANCIAL DATA</Text>
           <Text style={styles.localText}>STORED ON THIS DEVICE // NO CLOUD SYNC ENABLED</Text>
+        </View>
+
+        <View style={styles.authPanel}>
+          <View style={styles.authHeader}>
+            <Text style={styles.localTitle}>SUPABASE ACCOUNT</Text>
+            <Text style={styles.authCode}>{authEnabled ? 'CLOUD READY' : 'LOCAL MODE'}</Text>
+          </View>
+          {!authEnabled ? (
+            <Text style={styles.localText}>
+              ADD EXPO_PUBLIC_SUPABASE_URL AND EXPO_PUBLIC_SUPABASE_ANON_KEY TO ENABLE OPTIONAL CLOUD AUTH.
+            </Text>
+          ) : authLoading ? (
+            <Text style={styles.localText}>CHECKING SESSION...</Text>
+          ) : authUser ? (
+            <View style={styles.authSignedIn}>
+              <Text style={styles.authUser}>{authUser.email ?? 'SIGNED-IN USER'}</Text>
+              <Pressable style={styles.authButton} onPress={signOut}>
+                <Text style={styles.authButtonText}>[ SIGN OUT ]</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={styles.authInput}
+                placeholder="email@example.com"
+                placeholderTextColor="#9B91B8"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={authEmail}
+                onChangeText={setAuthEmail}
+              />
+              <TextInput
+                style={styles.authInput}
+                placeholder="password"
+                placeholderTextColor="#9B91B8"
+                secureTextEntry
+                value={authPassword}
+                onChangeText={setAuthPassword}
+              />
+              <View style={styles.authButtons}>
+                <Pressable style={styles.authButton} onPress={() => handleAuth('signIn')}>
+                  <Text style={styles.authButtonText}>[ SIGN IN ]</Text>
+                </Pressable>
+                <Pressable style={styles.authSecondaryButton} onPress={() => handleAuth('signUp')}>
+                  <Text style={styles.authSecondaryText}>[ CREATE ACCOUNT ]</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.statusPanel}>
@@ -310,6 +390,17 @@ const styles = StyleSheet.create({
   localPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12 },
   localTitle: { color: '#008F7D', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
   localText: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9, marginTop: 4 },
+  authPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, gap: 7 },
+  authHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  authCode: { color: '#008F7D', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
+  authInput: { minHeight: 44, borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 3, borderLeftColor: '#00F5D4', color: '#201A33', fontFamily: 'monospace', fontSize: 13, paddingHorizontal: 10 },
+  authButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 2 },
+  authButton: { backgroundColor: '#FF4FD8', borderWidth: 1, borderColor: '#00F5D4', paddingHorizontal: 10, paddingVertical: 9 },
+  authButtonText: { color: '#201A33', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  authSecondaryButton: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#5B2DB8', paddingHorizontal: 10, paddingVertical: 9 },
+  authSecondaryText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  authSignedIn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  authUser: { flex: 1, color: '#201A33', fontFamily: 'monospace', fontSize: 11 },
   statusPanel: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 4, borderLeftColor: '#00F5D4', padding: 14, marginTop: 4 },
   statusLabel: { fontFamily: 'monospace', fontSize: 10, fontWeight: '700', color: '#5D557A' },
   statusValue: { fontFamily: 'monospace', fontSize: 26, fontWeight: '700', color: '#5B2DB8', marginTop: 5 },

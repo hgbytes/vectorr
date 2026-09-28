@@ -23,6 +23,7 @@ export interface Expense {
   category: Category;
   note: string;
   date: string; // ISO string
+  updatedAt?: string;
 }
 
 export interface FinancialProfile {
@@ -36,6 +37,7 @@ export interface FinancialProfile {
   expectedAnnualReturn: number;
   incomeGrowthRate: number;
   expenseGrowthRate: number;
+  updatedAt?: string;
 }
 
 export const DEFAULT_FINANCIAL_PROFILE: FinancialProfile = {
@@ -52,6 +54,23 @@ export const DEFAULT_FINANCIAL_PROFILE: FinancialProfile = {
 };
 
 export type GoalPriority = 'Essential' | 'Important' | 'Optional';
+export type GoalCategory =
+  | 'Emergency'
+  | 'Retirement'
+  | 'Education'
+  | 'Home'
+  | 'Debt'
+  | 'Custom';
+export type GoalDeadlineType = 'Fixed' | 'Flexible';
+
+export const GOAL_CATEGORIES: GoalCategory[] = [
+  'Emergency',
+  'Retirement',
+  'Education',
+  'Home',
+  'Debt',
+  'Custom',
+];
 
 export interface FinancialGoal {
   id: string;
@@ -60,4 +79,36 @@ export interface FinancialGoal {
   currentAmount: number;
   targetDate: string;
   priority: GoalPriority;
+  category: GoalCategory;
+  minimumMonthlyContribution: number;
+  deadlineType: GoalDeadlineType;
+  updatedAt?: string;
+}
+
+export interface GoalScenarioResult {
+  contribution: number;
+  completionDate: string | null;
+  projectedValue: number;
+  shortfall: number;
+}
+
+export interface GoalScenario {
+  id: string;
+  name: string;
+  priorityStrategy: string;
+  goalContributions: Record<string, number>;
+  projectedResults: Record<string, GoalScenarioResult>;
+  conflicts: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProgressSnapshot {
+  id?: string;
+  reviewedAt: string;
+  availableGoalBudget: number;
+  monthlyExpenses: number;
+  totalSaved: number;
+  totalTarget: number;
+  updatedAt?: string;
 }
