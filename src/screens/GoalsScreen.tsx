@@ -241,7 +241,6 @@ function ScenarioPanel({
   if (!selected) return null;
   return (
     <View style={styles.scenarioPanel}>
-      <Text style={styles.scenarioTitle}>PRIORITY SCENARIOS</Text>
       <View style={styles.scenarioTabs}>
         {results.map((result) => (
           <Pressable
@@ -299,53 +298,63 @@ function ScenarioPanel({
   );
 }
 
-function RecommendationPanel({ recommendations }: { recommendations: GoalRecommendation[] }) {
+function RecommendationCard({ recommendation }: { recommendation: GoalRecommendation }) {
+  const actionable = Boolean(recommendation.onAction && recommendation.actionLabel);
+  const [hovered, setHovered] = useState(false);
   return (
-    <View style={styles.recommendationPanel}>
-      <Text style={styles.scenarioTitle}>TRADE-OFFS</Text>
-      {recommendations.length === 0 ? (
-        <Text style={styles.recommendationClear}>NOTHING TO CHANGE</Text>
-      ) : (
-        recommendations.map((recommendation, index) => (
-          <View key={`${recommendation.title}-${index}`} style={styles.recommendationRow}>
-            <Text style={styles.recommendationTitle}>{recommendation.title}</Text>
-            <Text style={styles.recommendationDetail}>{recommendation.detail}</Text>
-            {recommendation.onAction && recommendation.actionLabel && (
-              <Pressable
-                onPress={recommendation.onAction}
-                style={styles.recommendationButton}
-              >
-                <Text style={styles.recommendationButtonText}>
-                  [ {recommendation.actionLabel} ]
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        ))
-      )}
-      <Text style={styles.recommendationNote}>Not financial advice.</Text>
+    <View
+      style={[styles.recommendationCard, actionable && styles.recommendationCardActionable]}
+    >
+      <View
+        style={[
+          styles.recommendationIconBadge,
+          actionable && styles.recommendationIconBadgeActionable,
+        ]}
+      >
+        <Text style={styles.recommendationIconText}>{actionable ? '⚡' : 'ℹ'}</Text>
+      </View>
+      <View style={styles.recommendationBody}>
+        <Text style={styles.recommendationTitle}>{recommendation.title}</Text>
+        <Text style={styles.recommendationDetail}>{recommendation.detail}</Text>
+        {actionable && (
+          <Pressable
+            onPress={recommendation.onAction}
+            onHoverIn={() => setHovered(true)}
+            onHoverOut={() => setHovered(false)}
+            style={[styles.recommendationButton, hovered && styles.recommendationButtonHovered]}
+          >
+            <Text style={styles.recommendationButtonText}>
+              {recommendation.actionLabel}
+            </Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
 
-function GoalDisclosure({
-  title,
-  expanded,
-  onToggle,
-  children,
-}: {
-  title: string;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
+function RecommendationPanel({ recommendations }: { recommendations: GoalRecommendation[] }) {
+  const actionableCount = recommendations.filter((item) => item.onAction).length;
   return (
-    <View style={styles.goalDisclosure}>
-      <Pressable onPress={onToggle} style={styles.goalDisclosureToggle} accessibilityRole="button">
-        <Text style={styles.goalDisclosureTitle}>{title}</Text>
-        <Text style={styles.goalDisclosureIcon}>{expanded ? '−' : '+'}</Text>
-      </Pressable>
-      {expanded && children}
+    <View style={styles.recommendationPanel}>
+      {recommendations.length > 0 && (
+        <Text style={styles.recommendationHeaderMeta}>
+          {actionableCount} ACTIONABLE // {recommendations.length - actionableCount} TO REVIEW
+        </Text>
+      )}
+      {recommendations.length === 0 ? (
+        <View style={styles.recommendationEmpty}>
+          <Text style={styles.recommendationEmptyIcon}>✓</Text>
+          <Text style={styles.recommendationClear}>NOTHING TO CHANGE RIGHT NOW</Text>
+        </View>
+      ) : (
+        <View style={styles.recommendationList}>
+          {recommendations.map((recommendation, index) => (
+            <RecommendationCard key={`${recommendation.title}-${index}`} recommendation={recommendation} />
+          ))}
+        </View>
+      )}
+      <Text style={styles.recommendationNote}>Not financial advice.</Text>
     </View>
   );
 }
@@ -398,9 +407,16 @@ function ProgressDashboard({
     totalTarget,
   };
 
+  const [showActivity, setShowActivity] = useState(false);
+  const statusChips: { key: string; label: string; style?: object }[] = [
+    { key: 'ON TRACK', label: 'TRACK' },
+    { key: 'AT RISK', label: 'RISK', style: styles.statusChipRisk },
+    { key: 'UNREALISTIC', label: 'UNREAL', style: styles.statusChipUnrealistic },
+    { key: 'COMPLETE', label: 'DONE', style: styles.statusChipComplete },
+  ];
+
   return (
     <View style={styles.dashboardPanel}>
-      <Text style={styles.dashboardTitle}>PROGRESS</Text>
       <View style={styles.dashboardMetrics}>
         <DashboardMetric label="AVAILABLE / MO" value={formatCurrency(availableBudget)} />
         <DashboardMetric label="FUNDED" value={`${Math.round(progress)}%`} />
@@ -411,54 +427,63 @@ function ProgressDashboard({
         <View style={[styles.dashboardProgressFill, { width: `${progress}%` }]} />
       </View>
       <View style={styles.statusRow}>
-        {['ON TRACK', 'AT RISK', 'UNREALISTIC', 'COMPLETE'].map((status) => (
-          <Text
-            key={status}
-            style={[
-              styles.statusCount,
-              status === 'AT RISK' && styles.statusAtRisk,
-              status === 'UNREALISTIC' && styles.statusUnrealistic,
-              status === 'COMPLETE' && styles.statusComplete,
-            ]}
-          >
-            {status}: {statuses[status] ?? 0}
-          </Text>
+        {statusChips.map((chip) => (
+          <View key={chip.key} style={[styles.statusChip, chip.style]}>
+            <Text style={styles.statusChipCount}>{statuses[chip.key] ?? 0}</Text>
+            <Text style={styles.statusChipLabel}>{chip.label}</Text>
+          </View>
         ))}
       </View>
-      <View style={styles.dashboardSection}>
-        <Text style={styles.dashboardSectionTitle}>UPCOMING DEADLINES</Text>
-        {upcoming.length === 0 ? (
-          <Text style={styles.dashboardMuted}>NONE UPCOMING</Text>
-        ) : (
-          upcoming.map((goal) => (
-            <View key={goal.id} style={styles.dashboardDeadline}>
-              <Text style={styles.dashboardDeadlineName}>{goal.name}</Text>
-              <Text style={styles.dashboardDeadlineDate}>{goal.targetDate}</Text>
-            </View>
-          ))
-        )}
-      </View>
-      <View style={styles.dashboardSection}>
-        <Text style={styles.dashboardSectionTitle}>SINCE LAST REVIEW</Text>
-        {lastReview ? (
-          <>
-            <Text style={styles.dashboardChange}>BUDGET {signedCurrency(availableBudget - lastReview.availableGoalBudget)}</Text>
-            <Text style={styles.dashboardChange}>EXPENSES {signedCurrency(monthlyExpenses - lastReview.monthlyExpenses)}</Text>
-            <Text style={styles.dashboardChange}>SAVED {signedCurrency(totalSaved - lastReview.totalSaved)}</Text>
-            <Text style={styles.dashboardChange}>REVIEWED {new Date(lastReview.reviewedAt).toLocaleDateString()}</Text>
-          </>
-        ) : (
-          <Text style={styles.dashboardMuted}>SAVE A REVIEW TO TRACK CHANGES</Text>
-        )}
-      </View>
+
       <Pressable
-        style={styles.reviewButton}
-        onPress={async () => {
-          await onSaveReview(currentSnapshot);
-        }}
+        onPress={() => setShowActivity((current) => !current)}
+        style={styles.dashboardActivityToggle}
+        accessibilityRole="button"
       >
-        <Text style={styles.reviewButtonText}>[ SAVE REVIEW ]</Text>
+        <Text style={styles.dashboardActivityToggleText}>
+          {showActivity ? 'HIDE ACTIVITY' : 'DEADLINES & REVIEW'}
+        </Text>
+        <Text style={styles.goalDisclosureIcon}>{showActivity ? '−' : '+'}</Text>
       </Pressable>
+
+      {showActivity && (
+        <>
+          <View style={styles.dashboardSection}>
+            <Text style={styles.dashboardSectionTitle}>UPCOMING DEADLINES</Text>
+            {upcoming.length === 0 ? (
+              <Text style={styles.dashboardMuted}>NONE UPCOMING</Text>
+            ) : (
+              upcoming.map((goal) => (
+                <View key={goal.id} style={styles.dashboardDeadline}>
+                  <Text style={styles.dashboardDeadlineName}>{goal.name}</Text>
+                  <Text style={styles.dashboardDeadlineDate}>{goal.targetDate}</Text>
+                </View>
+              ))
+            )}
+          </View>
+          <View style={styles.dashboardSection}>
+            <Text style={styles.dashboardSectionTitle}>SINCE LAST REVIEW</Text>
+            {lastReview ? (
+              <>
+                <Text style={styles.dashboardChange}>BUDGET {signedCurrency(availableBudget - lastReview.availableGoalBudget)}</Text>
+                <Text style={styles.dashboardChange}>EXPENSES {signedCurrency(monthlyExpenses - lastReview.monthlyExpenses)}</Text>
+                <Text style={styles.dashboardChange}>SAVED {signedCurrency(totalSaved - lastReview.totalSaved)}</Text>
+                <Text style={styles.dashboardChange}>REVIEWED {new Date(lastReview.reviewedAt).toLocaleDateString()}</Text>
+              </>
+            ) : (
+              <Text style={styles.dashboardMuted}>SAVE A REVIEW TO TRACK CHANGES</Text>
+            )}
+          </View>
+          <Pressable
+            style={styles.reviewButton}
+            onPress={async () => {
+              await onSaveReview(currentSnapshot);
+            }}
+          >
+            <Text style={styles.reviewButtonText}>SAVE REVIEW</Text>
+          </Pressable>
+        </>
+      )}
     </View>
   );
 }
@@ -569,10 +594,6 @@ function detectConflicts(
 function ConflictPanel({ conflicts }: { conflicts: GoalConflict[] }) {
   return (
     <View style={styles.conflictPanel}>
-      <View style={styles.conflictHeader}>
-        <Text style={styles.conflictTitle}>CONFLICTS</Text>
-        <Text style={styles.conflictCode}>{conflicts.length}</Text>
-      </View>
       {conflicts.length === 0 ? (
         <Text style={styles.conflictClear}>NONE DETECTED</Text>
       ) : (
@@ -585,6 +606,100 @@ function ConflictPanel({ conflicts }: { conflicts: GoalConflict[] }) {
             </Text>
           </View>
         ))
+      )}
+    </View>
+  );
+}
+
+type InsightsTab = 'conflicts' | 'recommendations' | 'scenarios';
+
+function InsightsPanel({
+  conflicts,
+  recommendations,
+  scenarioResults,
+  scenarioKey,
+  onSelectScenario,
+  savedScenarios,
+  onSaveScenario,
+  onDeleteScenario,
+}: {
+  conflicts: GoalConflict[];
+  recommendations: GoalRecommendation[];
+  scenarioResults: ScenarioResult[];
+  scenarioKey: ScenarioKey;
+  onSelectScenario: (key: ScenarioKey) => void;
+  savedScenarios: GoalScenario[];
+  onSaveScenario: (result: ScenarioResult, conflicts: GoalConflict[]) => Promise<void>;
+  onDeleteScenario: (id: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [tab, setTab] = useState<InsightsTab>(
+    conflicts.length > 0 ? 'conflicts' : 'recommendations'
+  );
+  const tabs: { key: InsightsTab; label: string; count: number; alert: boolean }[] = [
+    { key: 'conflicts', label: 'CONFLICTS', count: conflicts.length, alert: conflicts.length > 0 },
+    {
+      key: 'recommendations',
+      label: 'FIXES',
+      count: recommendations.length,
+      alert: recommendations.some((item) => item.onAction),
+    },
+    { key: 'scenarios', label: 'PLANS', count: 0, alert: false },
+  ];
+  const totalFlags = conflicts.length + recommendations.filter((item) => item.onAction).length;
+
+  return (
+    <View style={styles.insightsPanel}>
+      <Pressable
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.insightsToggle}
+        accessibilityRole="button"
+      >
+        <View style={styles.insightsToggleLeft}>
+          <Text style={styles.insightsToggleTitle}>INSIGHTS</Text>
+          {totalFlags > 0 && (
+            <View style={styles.insightsBadge}>
+              <Text style={styles.insightsBadgeText}>{totalFlags}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.goalDisclosureIcon}>{expanded ? '−' : '+'}</Text>
+      </Pressable>
+      {expanded && (
+        <View style={styles.insightsBody}>
+          <View style={styles.insightsTabs}>
+            {tabs.map((item) => (
+              <Pressable
+                key={item.key}
+                onPress={() => setTab(item.key)}
+                style={[styles.insightsTab, tab === item.key && styles.insightsTabSelected]}
+              >
+                <Text
+                  style={[
+                    styles.insightsTabText,
+                    tab === item.key && styles.insightsTabTextSelected,
+                    item.alert && tab !== item.key && styles.insightsTabAlertText,
+                  ]}
+                >
+                  {item.label}{item.key !== 'scenarios' ? ` ${item.count}` : ''}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {tab === 'conflicts' && <ConflictPanel conflicts={conflicts} />}
+          {tab === 'recommendations' && <RecommendationPanel recommendations={recommendations} />}
+          {tab === 'scenarios' && (
+            <ScenarioPanel
+              results={scenarioResults}
+              selectedKey={scenarioKey}
+              onSelect={onSelectScenario}
+              conflicts={conflicts}
+              savedScenarios={savedScenarios}
+              onSave={onSaveScenario}
+              onDelete={onDeleteScenario}
+            />
+          )}
+        </View>
       )}
     </View>
   );
@@ -616,9 +731,7 @@ export default function GoalsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [formError, setFormError] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
-  const [showConflicts, setShowConflicts] = useState(false);
-  const [showRecommendations, setShowRecommendations] = useState(false);
-  const [showScenarios, setShowScenarios] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const monthlyExpenses = useMemo(() => {
     const now = new Date();
     return expenses
@@ -796,6 +909,7 @@ export default function GoalsScreen() {
       setCategory('Custom');
       setMinimumContribution('');
       setDeadlineType('Fixed');
+      setShowAddForm(false);
     } finally {
       setSavingGoal(false);
     }
@@ -838,28 +952,29 @@ export default function GoalsScreen() {
           onSaveReview={recordReview}
         />
 
-        <GoalDisclosure title={`CONFLICTS (${conflicts.length})`} expanded={showConflicts} onToggle={() => setShowConflicts((current) => !current)}>
-          <ConflictPanel conflicts={conflicts} />
-        </GoalDisclosure>
+        <InsightsPanel
+          conflicts={conflicts}
+          recommendations={recommendations}
+          scenarioResults={scenarios}
+          scenarioKey={scenarioKey}
+          onSelectScenario={setScenarioKey}
+          savedScenarios={savedScenarios}
+          onSaveScenario={handleSaveScenario}
+          onDeleteScenario={deleteScenario}
+        />
 
-        <GoalDisclosure title={`TRADE-OFFS (${recommendations.length})`} expanded={showRecommendations} onToggle={() => setShowRecommendations((current) => !current)}>
-          <RecommendationPanel recommendations={recommendations} />
-        </GoalDisclosure>
-
-        <GoalDisclosure title="PRIORITY SCENARIOS" expanded={showScenarios} onToggle={() => setShowScenarios((current) => !current)}>
-          <ScenarioPanel
-            results={scenarios}
-            selectedKey={scenarioKey}
-            onSelect={setScenarioKey}
-            conflicts={conflicts}
-            savedScenarios={savedScenarios}
-            onSave={handleSaveScenario}
-            onDelete={deleteScenario}
-          />
-        </GoalDisclosure>
-
+        {!showAddForm ? (
+          <Pressable style={styles.addGoalTrigger} onPress={() => setShowAddForm(true)}>
+            <Text style={styles.addGoalTriggerText}>+ ADD GOAL</Text>
+          </Pressable>
+        ) : (
         <View style={styles.formPanel}>
-          <Text style={styles.sectionLabel}>NEW GOAL</Text>
+          <View style={styles.formPanelHeader}>
+            <Text style={[styles.sectionLabel, { marginTop: 0 }]}>NEW GOAL</Text>
+            <Pressable onPress={() => setShowAddForm(false)}>
+              <Text style={styles.formCancelText}>CANCEL</Text>
+            </Pressable>
+          </View>
           <GoalField
             label="GOAL NAME"
             placeholder="e.g. emergency fund"
@@ -962,9 +1077,10 @@ export default function GoalsScreen() {
           </View>
           {!!formError && <Text style={styles.formError}>{formError}</Text>}
           <Pressable style={[styles.addButton, savingGoal && styles.disabledButton]} onPress={handleAdd} disabled={savingGoal}>
-            <Text style={styles.addText}>{savingGoal ? '[ SAVING... ]' : '[ ADD GOAL ]'}</Text>
+            <Text style={styles.addText}>{savingGoal ? 'SAVING…' : 'SAVE GOAL'}</Text>
           </Pressable>
         </View>
+        )}
 
         <Text style={styles.sectionLabel}>GOALS</Text>
         {goals.length === 0 ? (
@@ -976,106 +1092,17 @@ export default function GoalsScreen() {
             </Text>
           </View>
         ) : (
-          goals.map((goal) => {
-            const progress = Math.min(
-              100,
-              Math.max(0, (goal.currentAmount / goal.targetAmount) * 100)
-            );
-            const projection = projectGoal(
-              goal,
-              currentContribution,
-              profile.expectedAnnualReturn
-            );
-            const status = goalStatus(goal, currentContribution);
-            const sensitivity = [
-              {
-                label: 'INCOME +10%',
-                value: projectGoal(
-                  goal,
-                  currentContribution + (profile.monthlyIncome * 0.1) / Math.max(goals.length, 1),
-                  profile.expectedAnnualReturn
-                ).surplus,
-              },
-              {
-                label: 'EXPENSES -10%',
-                value: projectGoal(
-                  goal,
-                  currentContribution + (monthlyExpenses * 0.1) / Math.max(goals.length, 1),
-                  profile.expectedAnnualReturn
-                ).surplus,
-              },
-              {
-                label: 'SAVINGS +10%',
-                value: projectGoal(
-                  goal,
-                  currentContribution,
-                  profile.expectedAnnualReturn,
-                  goal.currentAmount * 1.1
-                ).surplus,
-              },
-              {
-                label: 'RETURN +2 PTS',
-                value: projectGoal(
-                  goal,
-                  currentContribution,
-                  profile.expectedAnnualReturn + 2
-                ).surplus,
-              },
-            ];
-            return (
-              <View key={goal.id} style={styles.goalCard}>
-                <View style={styles.goalHeader}>
-                  <View style={styles.goalNameWrap}>
-                    <Text style={styles.goalName} numberOfLines={1}>
-                      {goal.name}
-                    </Text>
-                    <Text style={styles.goalMeta}>
-                      {goal.priority.toUpperCase()} // DUE {goal.targetDate}
-                    </Text>
-                  </View>
-                  <Text style={[
-                    styles.goalStatus,
-                    status === 'AT RISK' && styles.statusAtRisk,
-                    status === 'COMPLETE' && styles.statusComplete,
-                    status === 'SET BUDGET' && styles.statusBudget,
-                  ]}>
-                    {status}
-                  </Text>
-                </View>
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${progress}%` }]} />
-                </View>
-                <View style={styles.goalStats}>
-                  <Text style={styles.goalStat}>{formatCurrency(goal.currentAmount)} SAVED</Text>
-                  <Text style={styles.goalStat}>{Math.round(progress)}%</Text>
-                  <Text style={styles.goalStat}>{formatCurrency(projection.requiredMonthly)}/MO</Text>
-                </View>
-                <View style={styles.analysisPanel}>
-                  <Text style={styles.analysisTitle}>FEASIBILITY</Text>
-                  <AnalysisRow label="EQUAL SHARE" value={`${formatCurrency(currentContribution)} / MO`} />
-                  <AnalysisRow label="COMPLETION" value={formatProjectionDate(projection.completionDate)} />
-                  <AnalysisRow label="AT TARGET" value={formatCurrency(projection.projected)} />
-                  <AnalysisRow
-                    label={projection.surplus >= 0 ? 'SURPLUS' : 'SHORTFALL'}
-                    value={formatCurrency(Math.abs(projection.surplus))}
-                    emphasis={projection.surplus < 0}
-                  />
-                  <Text style={styles.sensitivityTitle}>SENSITIVITY</Text>
-                  {sensitivity.map((scenario) => (
-                    <AnalysisRow
-                      key={scenario.label}
-                      label={scenario.label}
-                      value={`${scenario.value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(scenario.value))}`}
-                      emphasis={scenario.value < 0}
-                    />
-                  ))}
-                </View>
-                <Pressable onPress={() => deleteGoal(goal.id)} style={styles.deleteButton}>
-                  <Text style={styles.deleteText}>[ DELETE ]</Text>
-                </Pressable>
-              </View>
-            );
-          })
+          goals.map((goal) => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              currentContribution={currentContribution}
+              profile={profile}
+              monthlyExpenses={monthlyExpenses}
+              goalsCount={goals.length}
+              onDelete={deleteGoal}
+            />
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
@@ -1140,6 +1167,138 @@ function AnalysisRow({
   );
 }
 
+function GoalCard({
+  goal,
+  currentContribution,
+  profile,
+  monthlyExpenses,
+  goalsCount,
+  onDelete,
+}: {
+  goal: FinancialGoal;
+  currentContribution: number;
+  profile: FinancialProfile;
+  monthlyExpenses: number;
+  goalsCount: number;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const progress = Math.min(100, Math.max(0, (goal.currentAmount / goal.targetAmount) * 100));
+  const projection = projectGoal(goal, currentContribution, profile.expectedAnnualReturn);
+  const status = goalStatus(goal, currentContribution);
+  const sensitivity = [
+    {
+      label: 'INCOME +10%',
+      value: projectGoal(
+        goal,
+        currentContribution + (profile.monthlyIncome * 0.1) / Math.max(goalsCount, 1),
+        profile.expectedAnnualReturn
+      ).surplus,
+    },
+    {
+      label: 'EXPENSES -10%',
+      value: projectGoal(
+        goal,
+        currentContribution + (monthlyExpenses * 0.1) / Math.max(goalsCount, 1),
+        profile.expectedAnnualReturn
+      ).surplus,
+    },
+    {
+      label: 'SAVINGS +10%',
+      value: projectGoal(
+        goal,
+        currentContribution,
+        profile.expectedAnnualReturn,
+        goal.currentAmount * 1.1
+      ).surplus,
+    },
+    {
+      label: 'RETURN +2 PTS',
+      value: projectGoal(goal, currentContribution, profile.expectedAnnualReturn + 2).surplus,
+    },
+  ];
+
+  const handleDelete = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove "${goal.name}"? This can't be undone.`)) {
+        onDelete(goal.id);
+      }
+      return;
+    }
+    Alert.alert('DELETE GOAL', `Remove "${goal.name}"? This can't be undone.`, [
+      { text: 'CANCEL', style: 'cancel' },
+      { text: 'DELETE', style: 'destructive', onPress: () => onDelete(goal.id) },
+    ]);
+  };
+
+  return (
+    <View style={styles.goalCard}>
+      <Pressable
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.goalHeader}
+        accessibilityRole="button"
+      >
+        <View style={styles.goalNameWrap}>
+          <Text style={styles.goalName} numberOfLines={1}>
+            {goal.name}
+          </Text>
+          <Text style={styles.goalMeta}>
+            {goal.priority.toUpperCase()} // DUE {goal.targetDate}
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.goalStatus,
+            status === 'AT RISK' && styles.statusAtRisk,
+            status === 'COMPLETE' && styles.statusComplete,
+            status === 'SET BUDGET' && styles.statusBudget,
+          ]}
+        >
+          {status}
+        </Text>
+      </Pressable>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${progress}%` }]} />
+      </View>
+      <View style={styles.goalStats}>
+        <Text style={styles.goalStat}>{formatCurrency(goal.currentAmount)} SAVED</Text>
+        <Text style={styles.goalStat}>{Math.round(progress)}%</Text>
+        <Text style={styles.goalStat}>{formatCurrency(projection.requiredMonthly)}/MO</Text>
+      </View>
+      {expanded && (
+        <View style={styles.analysisPanel}>
+          <Text style={styles.analysisTitle}>FEASIBILITY</Text>
+          <AnalysisRow label="EQUAL SHARE" value={`${formatCurrency(currentContribution)} / MO`} />
+          <AnalysisRow label="COMPLETION" value={formatProjectionDate(projection.completionDate)} />
+          <AnalysisRow label="AT TARGET" value={formatCurrency(projection.projected)} />
+          <AnalysisRow
+            label={projection.surplus >= 0 ? 'SURPLUS' : 'SHORTFALL'}
+            value={formatCurrency(Math.abs(projection.surplus))}
+            emphasis={projection.surplus < 0}
+          />
+          <Text style={styles.sensitivityTitle}>SENSITIVITY</Text>
+          {sensitivity.map((scenario) => (
+            <AnalysisRow
+              key={scenario.label}
+              label={scenario.label}
+              value={`${scenario.value >= 0 ? '+' : '-'}${formatCurrency(Math.abs(scenario.value))}`}
+              emphasis={scenario.value < 0}
+            />
+          ))}
+        </View>
+      )}
+      <View style={styles.goalCardFooter}>
+        <Pressable onPress={() => setExpanded((current) => !current)}>
+          <Text style={styles.detailsToggleText}>{expanded ? 'HIDE DETAILS' : 'VIEW DETAILS'}</Text>
+        </Pressable>
+        <Pressable onPress={handleDelete} hitSlop={8}>
+          <Text style={styles.deleteText}>DELETE</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F6FF' },
   content: {
@@ -1179,8 +1338,6 @@ const styles = StyleSheet.create({
   panelMeta: { fontFamily: 'monospace', fontSize: 10, color: '#D6009A', marginTop: 4 },
   assumptionText: { fontFamily: 'monospace', fontSize: 8, color: '#6B6680', marginTop: 8, lineHeight: 12 },
   dashboardPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, marginTop: 2, gap: 8 },
-  dashboardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  dashboardTitle: { color: '#201A33', fontFamily: 'monospace', fontSize: 17, fontWeight: '700' },
   dashboardMetrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   dashboardMetric: { flexGrow: 1, flexBasis: '45%', minWidth: 125, backgroundColor: '#F8F6FF', borderWidth: 1, borderColor: '#E1DAF1', padding: 9 },
   dashboardMetricLabel: { color: '#6B6680', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
@@ -1188,12 +1345,35 @@ const styles = StyleSheet.create({
   dashboardRisk: { color: '#C52757' },
   dashboardProgressTrack: { height: 10, backgroundColor: '#F0ECFA', borderWidth: 1, borderColor: '#B8AEDB', overflow: 'hidden' },
   dashboardProgressFill: { height: '100%', backgroundColor: '#00C7AD' },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statusCount: { color: '#008F7D', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F8F6FF',
+    borderWidth: 1,
+    borderColor: '#E1DAF1',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  statusChipRisk: { backgroundColor: '#FFF3E4', borderColor: '#E7B84B' },
+  statusChipUnrealistic: { backgroundColor: '#FDEAEE', borderColor: '#E79CAF' },
+  statusChipComplete: { backgroundColor: '#E4FBF6', borderColor: '#7FE0CB' },
+  statusChipCount: { color: '#201A33', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
+  statusChipLabel: { color: '#6B6680', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
   statusAtRisk: { color: '#A45A00' },
   statusUnrealistic: { color: '#C52757' },
   statusComplete: { color: '#008F7D' },
   statusBudget: { color: '#A45A00' },
+  dashboardActivityToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E1DAF1',
+    paddingTop: 8,
+  },
+  dashboardActivityToggleText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   dashboardSection: { borderTopWidth: 1, borderTopColor: '#E1DAF1', paddingTop: 8, gap: 5 },
   dashboardSectionTitle: { color: '#D6009A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   dashboardMuted: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, lineHeight: 12 },
@@ -1203,16 +1383,13 @@ const styles = StyleSheet.create({
   dashboardChange: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9 },
   reviewButton: { backgroundColor: '#FF4FD8', borderWidth: 2, borderColor: '#00F5D4', paddingVertical: 12, alignItems: 'center' },
   reviewButtonText: { color: '#201A33', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
-  conflictPanel: { backgroundColor: '#FFF8E8', borderWidth: 1, borderColor: '#E7B84B', borderLeftWidth: 4, borderLeftColor: '#C52757', padding: 12, marginTop: 2, gap: 8 },
-  conflictHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  conflictTitle: { color: '#C52757', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
-  conflictCode: { color: '#A45A00', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  conflictPanel: { gap: 8 },
   conflictClear: { color: '#008F7D', fontFamily: 'monospace', fontSize: 9 },
   conflictItem: { borderTopWidth: 1, borderTopColor: '#F0D9A0', paddingTop: 7, gap: 3 },
   conflictItemTitle: { color: '#C52757', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   conflictDetail: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, lineHeight: 13 },
   conflictGoals: { color: '#A45A00', fontFamily: 'monospace', fontSize: 8, lineHeight: 12 },
-  scenarioPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, marginTop: 2, gap: 8 },
+  scenarioPanel: { gap: 8 },
   scenarioHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   scenarioCaption: { color: '#D6009A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700', marginBottom: 5 },
   scenarioTitle: { color: '#201A33', fontFamily: 'monospace', fontSize: 16, fontWeight: '700' },
@@ -1236,19 +1413,68 @@ const styles = StyleSheet.create({
   savedScenarioPanel: { borderTopWidth: 1, borderTopColor: '#E1DAF1', paddingTop: 8, gap: 6 },
   savedScenarioRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   savedScenarioName: { flex: 1, gap: 3 },
-  recommendationPanel: { backgroundColor: '#F4F0FF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 4, borderLeftColor: '#5B2DB8', padding: 12, marginTop: 2, gap: 8 },
-  recommendationRow: { borderTopWidth: 1, borderTopColor: '#D9D0EE', paddingTop: 8, gap: 4 },
+  recommendationPanel: { gap: 10 },
+  recommendationHeader: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: 4 },
+  recommendationHeaderMeta: { color: '#5D557A', fontFamily: 'monospace', fontSize: 8, fontWeight: '700' },
+  recommendationList: { gap: 8 },
+  recommendationCard: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D9D0EE',
+    padding: 10,
+  },
+  recommendationCardActionable: { borderColor: '#5B2DB8' },
+  recommendationIconBadge: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#B8AEDB',
+    backgroundColor: '#F4F0FF',
+  },
+  recommendationIconBadgeActionable: { backgroundColor: '#FFE9F8', borderColor: '#D6009A' },
+  recommendationIconText: { fontFamily: 'monospace', fontSize: 14 },
+  recommendationBody: { flex: 1, gap: 4 },
   recommendationTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   recommendationDetail: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, lineHeight: 13 },
-  recommendationButton: { alignSelf: 'flex-start', backgroundColor: '#FF4FD8', borderWidth: 1, borderColor: '#00F5D4', paddingHorizontal: 9, paddingVertical: 7, marginTop: 2 },
+  recommendationButton: { alignSelf: 'flex-start', backgroundColor: '#FF4FD8', borderWidth: 1, borderColor: '#00F5D4', paddingHorizontal: 10, paddingVertical: 7, marginTop: 3 },
+  recommendationButtonHovered: { backgroundColor: '#00F5D4', borderColor: '#FF4FD8' },
   recommendationButtonText: { color: '#201A33', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  recommendationClear: { color: '#008F7D', fontFamily: 'monospace', fontSize: 9 },
+  recommendationEmpty: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  recommendationEmptyIcon: { color: '#008F7D', fontFamily: 'monospace', fontSize: 14, fontWeight: '700' },
+  recommendationClear: { color: '#008F7D', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   recommendationNote: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, lineHeight: 12 },
-  goalDisclosure: { marginTop: 2, gap: 6 },
-  goalDisclosureToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', paddingHorizontal: 12, paddingVertical: 10 },
-  goalDisclosureTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   goalDisclosureIcon: { color: '#D6009A', fontFamily: 'monospace', fontSize: 18, fontWeight: '700' },
-  formPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, gap: 8 },
+  insightsPanel: { marginTop: 2, gap: 6 },
+  insightsToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E9E2FF',
+    borderWidth: 1,
+    borderColor: '#B8AEDB',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  insightsToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  insightsToggleTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  insightsBadge: { backgroundColor: '#D6009A', minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  insightsBadgeText: { color: '#FFFFFF', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  insightsBody: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, gap: 10 },
+  insightsTabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  insightsTab: { borderWidth: 1, borderColor: '#B8AEDB', backgroundColor: '#F8F6FF', paddingHorizontal: 9, paddingVertical: 6 },
+  insightsTabSelected: { backgroundColor: '#5B2DB8', borderColor: '#5B2DB8' },
+  insightsTabText: { color: '#3D3854', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  insightsTabTextSelected: { color: '#FFFFFF' },
+  insightsTabAlertText: { color: '#C52757' },
+  addGoalTrigger: { backgroundColor: '#FF4FD8', borderWidth: 2, borderColor: '#00F5D4', paddingVertical: 13, alignItems: 'center', marginTop: 2 },
+  addGoalTriggerText: { color: '#201A33', fontFamily: 'monospace', fontSize: 12, fontWeight: '700' },
+  formPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, gap: 8, marginTop: 2 },
+  formPanelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  formCancelText: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   sectionLabel: { fontFamily: 'monospace', fontSize: 11, fontWeight: '700', color: '#D6009A', marginTop: 10, marginBottom: 2 },
   field: { gap: 5 },
   fieldLabel: { fontFamily: 'monospace', fontSize: 10, fontWeight: '700', color: '#6B6680' },
@@ -1290,6 +1516,14 @@ const styles = StyleSheet.create({
   analysisRisk: { color: '#C52757' },
   sensitivityTitle: { color: '#D6009A', fontFamily: 'monospace', fontSize: 8, fontWeight: '700', marginTop: 4 },
   analysisNote: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, lineHeight: 12, marginTop: 3 },
-  deleteButton: { alignSelf: 'flex-start', paddingVertical: 2 },
+  goalCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0ECFA',
+    paddingTop: 8,
+  },
+  detailsToggleText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   deleteText: { color: '#C52757', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
 });
