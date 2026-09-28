@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useExpenses } from '../ExpensesContext';
-import { DEFAULT_FINANCIAL_PROFILE, FinancialProfile } from '../types';
+import { FinancialProfile } from '../types';
 
 function formatCurrency(amount: number) {
   return `₹${amount.toFixed(2)}`;
@@ -45,7 +45,6 @@ export default function ProfileScreen() {
     syncError,
   } = useExpenses();
   const [values, setValues] = useState(() => profileToStrings(profile));
-  const [dataText, setDataText] = useState('');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [formError, setFormError] = useState('');
@@ -119,41 +118,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleExport = () => {
-    setDataText(JSON.stringify(profile, null, 2));
-    Alert.alert('EXPORT READY', 'JSON READY TO COPY.');
-  };
-
-  const handleImport = async () => {
-    try {
-      const imported = JSON.parse(dataText) as Partial<FinancialProfile>;
-      const next = { ...DEFAULT_FINANCIAL_PROFILE, ...imported };
-      if (Object.values(next).some((value) => typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
-        throw new Error('Invalid numeric value');
-      }
-      await updateProfile(next);
-      setDataText('');
-      Alert.alert('IMPORT COMPLETE', 'PROFILE RESTORED.');
-    } catch {
-      Alert.alert('IMPORT FAILED', 'INVALID JSON.');
-    }
-  };
-
-  const handleClear = () => {
-    Alert.alert('CLEAR PROFILE DATA', 'RESET PROFILE VALUES? EXPENSES & GOALS STAY.', [
-      { text: 'CANCEL', style: 'cancel' },
-      {
-        text: 'CLEAR',
-        style: 'destructive',
-        onPress: async () => {
-          await updateProfile(DEFAULT_FINANCIAL_PROFILE);
-          setDataText('');
-          Alert.alert('PROFILE CLEARED', 'RESET TO DEFAULTS.');
-        },
-      },
-    ]);
-  };
-
   const handleAuth = async (mode: 'signIn' | 'signUp') => {
     try {
       if (!authEmail.trim() || authPassword.length < 6) {
@@ -178,11 +142,6 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.titleBar}>
           <Text style={styles.title}>PROFILE</Text>
-        </View>
-
-        <View style={styles.localPanel}>
-          <Text style={styles.localTitle}>LOCAL DATA</Text>
-          <Text style={styles.localText}>STORED ON THIS DEVICE</Text>
         </View>
 
         <View style={styles.authPanel}>
@@ -295,28 +254,6 @@ export default function ProfileScreen() {
           <ReviewRow label="AVAILABLE VS PLAN" value={`${budgetDelta >= 0 ? '+' : ''}${formatCurrency(budgetDelta)}`} />
         </View>
 
-        <View style={styles.dataPanel}>
-          <Text style={styles.reviewTitle}>DATA</Text>
-          <TextInput
-            style={styles.dataInput}
-            multiline
-            value={dataText}
-            onChangeText={setDataText}
-            placeholder="Exported JSON appears here"
-            placeholderTextColor="#9B91B8"
-          />
-          <View style={styles.dataButtons}>
-            <Pressable style={styles.smallButton} onPress={handleExport}>
-              <Text style={styles.smallButtonText}>[ EXPORT ]</Text>
-            </Pressable>
-            <Pressable style={styles.smallButton} onPress={handleImport}>
-              <Text style={styles.smallButtonText}>[ IMPORT ]</Text>
-            </Pressable>
-            <Pressable style={styles.clearButton} onPress={handleClear}>
-              <Text style={styles.clearButtonText}>[ CLEAR ]</Text>
-            </Pressable>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -399,7 +336,6 @@ const styles = StyleSheet.create({
   windowCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
   title: { fontFamily: 'monospace', fontSize: 21, fontWeight: '700', color: '#201A33' },
   windowMark: { color: '#008F7D', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
-  localPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12 },
   localTitle: { color: '#008F7D', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
   localText: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9, marginTop: 4 },
   authPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, gap: 7 },
@@ -442,11 +378,4 @@ const styles = StyleSheet.create({
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   reviewLabel: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9 },
   reviewValue: { color: '#A45A00', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
-  dataPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, marginTop: 2 },
-  dataInput: { minHeight: 100, borderWidth: 1, borderColor: '#B8AEDB', color: '#201A33', fontFamily: 'monospace', fontSize: 11, padding: 10, textAlignVertical: 'top' },
-  dataButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 9 },
-  smallButton: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#5B2DB8', paddingHorizontal: 10, paddingVertical: 9 },
-  smallButtonText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  clearButton: { backgroundColor: '#FFE7EF', borderWidth: 1, borderColor: '#C52757', paddingHorizontal: 10, paddingVertical: 9 },
-  clearButtonText: { color: '#C52757', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
 });
