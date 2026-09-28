@@ -41,6 +41,8 @@ export default function ProfileScreen() {
     signIn,
     signUp,
     signOut,
+    syncing,
+    syncError,
   } = useExpenses();
   const [values, setValues] = useState(() => profileToStrings(profile));
   const [dataText, setDataText] = useState('');
@@ -192,7 +194,12 @@ export default function ProfileScreen() {
             <Text style={styles.localText}>CHECKING SESSION...</Text>
           ) : authUser ? (
             <View style={styles.authSignedIn}>
-              <Text style={styles.authUser}>{authUser.email ?? 'SIGNED-IN USER'}</Text>
+              <View style={styles.authUserBlock}>
+                <Text style={styles.authUser}>{authUser.email ?? 'SIGNED-IN USER'}</Text>
+                <Text style={syncError ? styles.authError : styles.authSyncStatus}>
+                  {syncing ? 'SYNCING...' : syncError ? `SYNC ERROR: ${syncError}` : 'SYNC READY'}
+                </Text>
+              </View>
               <Pressable style={styles.authButton} onPress={signOut}>
                 <Text style={styles.authButtonText}>[ SIGN OUT ]</Text>
               </Pressable>
@@ -401,6 +408,9 @@ const styles = StyleSheet.create({
   authSecondaryText: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
   authSignedIn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   authUser: { flex: 1, color: '#201A33', fontFamily: 'monospace', fontSize: 11 },
+  authUserBlock: { flex: 1, gap: 3 },
+  authSyncStatus: { color: '#008F7D', fontFamily: 'monospace', fontSize: 8 },
+  authError: { color: '#C52757', fontFamily: 'monospace', fontSize: 8 },
   statusPanel: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', borderLeftWidth: 4, borderLeftColor: '#00F5D4', padding: 14, marginTop: 4 },
   statusLabel: { fontFamily: 'monospace', fontSize: 10, fontWeight: '700', color: '#5D557A' },
   statusValue: { fontFamily: 'monospace', fontSize: 26, fontWeight: '700', color: '#5B2DB8', marginTop: 5 },

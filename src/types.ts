@@ -24,6 +24,7 @@ export interface Expense {
   note: string;
   date: string; // ISO string
   updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface FinancialProfile {
@@ -83,6 +84,7 @@ export interface FinancialGoal {
   minimumMonthlyContribution: number;
   deadlineType: GoalDeadlineType;
   updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface GoalScenarioResult {
@@ -101,6 +103,7 @@ export interface GoalScenario {
   conflicts: string[];
   createdAt: string;
   updatedAt?: string;
+  deletedAt?: string;
 }
 
 export interface ProgressSnapshot {

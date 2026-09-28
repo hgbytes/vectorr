@@ -27,7 +27,7 @@ import {
   saveGoalScenarios,
 } from './storage';
 import { isSupabaseConfigured, supabase } from './supabase';
-import { syncUserData } from './sync';
+import { SyncState, syncUserData } from './sync';
 
 interface ExpensesContextValue {
   expenses: Expense[];
@@ -55,6 +55,8 @@ interface ExpensesContextValue {
   signOut: () => Promise<void>;
   lastReview: ProgressSnapshot | null;
   recordReview: (snapshot: ProgressSnapshot) => Promise<void>;
+  syncing: boolean;
+  syncError: string | null;
 }
 
 const ExpensesContext = createContext<ExpensesContextValue | undefined>(
@@ -72,6 +74,8 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -94,36 +98,14 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authUser || loading) return;
-    let active = true;
-    syncUserData(authUser.id, {
+    void syncState({
       expenses,
       profile,
       goals,
       scenarios,
       review: lastReview,
-    })
-      .then(async (merged) => {
-        if (!active) return;
-        setExpenses(merged.expenses);
-        setProfile(merged.profile);
-        setGoals(merged.goals);
-        setScenarios(merged.scenarios);
-        setLastReview(merged.review);
-        await Promise.all([
-          saveExpenses(merged.expenses),
-          saveFinancialProfile(merged.profile),
-          saveGoals(merged.goals),
-          saveGoalScenarios(merged.scenarios),
-          merged.review ? saveProgressSnapshot(merged.review) : Promise.resolve(),
-        ]);
-      })
-      .catch(() => {
-        // Local data remains available when the cloud is offline or not migrated.
       });
-    return () => {
-      active = false;
-    };
-  }, [authUser, loading]);
+      }, [authUser, loading]);
 
   useEffect(() => {
     if (!supabase) {
@@ -151,6 +133,31 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const syncState = async (state: SyncState) => {
+    if (!authUser) return;
+    setSyncing(true);
+    try {
+      const merged = await syncUserData(authUser.id, state);
+      setExpenses(merged.expenses);
+      setProfile(merged.profile);
+      setGoals(merged.goals);
+      setScenarios(merged.scenarios);
+      setLastReview(merged.review);
+      await Promise.all([
+        saveExpenses(merged.expenses),
+        saveFinancialProfile(merged.profile),
+        saveGoals(merged.goals),
+        saveGoalScenarios(merged.scenarios),
+        merged.review ? saveProgressSnapshot(merged.review) : Promise.resolve(),
+      ]);
+      setSyncError(null);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : 'Cloud sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const addExpense = async (expense: Omit<Expense, 'id'>) => {
     const newExpense: Expense = {
       ...expense,
@@ -160,18 +167,25 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     const next = [newExpense, ...expenses];
     setExpenses(next);
     await saveExpenses(next);
+    await syncState({ expenses: next, profile, goals, scenarios, review: lastReview });
   };
 
   const deleteExpense = async (id: string) => {
-    const next = expenses.filter((e) => e.id !== id);
+    const next = expenses.map((expense) =>
+      expense.id === id
+        ? { ...expense, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        : expense
+    );
     setExpenses(next);
     await saveExpenses(next);
+    await syncState({ expenses: next, profile, goals, scenarios, review: lastReview });
   };
 
   const updateProfile = async (nextProfile: FinancialProfile) => {
     const updated = { ...nextProfile, updatedAt: new Date().toISOString() };
     setProfile(updated);
     await saveFinancialProfile(updated);
+    await syncState({ expenses, profile: updated, goals, scenarios, review: lastReview });
   };
 
   const addGoal = async (goal: Omit<FinancialGoal, 'id'>) => {
@@ -183,6 +197,7 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     const next = [newGoal, ...goals];
     setGoals(next);
     await saveGoals(next);
+    await syncState({ expenses, profile, goals: next, scenarios, review: lastReview });
   };
 
   const updateGoal = async (
@@ -196,12 +211,18 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     );
     setGoals(next);
     await saveGoals(next);
+    await syncState({ expenses, profile, goals: next, scenarios, review: lastReview });
   };
 
   const deleteGoal = async (id: string) => {
-    const next = goals.filter((goal) => goal.id !== id);
+    const next = goals.map((goal) =>
+      goal.id === id
+        ? { ...goal, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        : goal
+    );
     setGoals(next);
     await saveGoals(next);
+    await syncState({ expenses, profile, goals: next, scenarios, review: lastReview });
   };
 
   const recordReview = async (snapshot: ProgressSnapshot) => {
@@ -212,6 +233,7 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     };
     setLastReview(updated);
     await saveProgressSnapshot(updated);
+    await syncState({ expenses, profile, goals, scenarios, review: updated });
   };
 
   const saveScenario = async (
@@ -226,12 +248,18 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     const next = [saved, ...scenarios];
     setScenarios(next);
     await saveGoalScenarios(next);
+    await syncState({ expenses, profile, goals, scenarios: next, review: lastReview });
   };
 
   const deleteScenario = async (id: string) => {
-    const next = scenarios.filter((scenario) => scenario.id !== id);
+    const next = scenarios.map((scenario) =>
+      scenario.id === id
+        ? { ...scenario, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        : scenario
+    );
     setScenarios(next);
     await saveGoalScenarios(next);
+    await syncState({ expenses, profile, goals, scenarios: next, review: lastReview });
   };
 
   const signIn = async (email: string, password: string) => {
@@ -260,20 +288,20 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
   return (
     <ExpensesContext.Provider
       value={{
-        expenses,
+        expenses: expenses.filter((expense) => !expense.deletedAt),
         loading,
         addExpense,
         deleteExpense,
         total,
         profile,
         updateProfile,
-        goals,
+        goals: goals.filter((goal) => !goal.deletedAt),
         addGoal,
         updateGoal,
         deleteGoal,
         lastReview,
         recordReview,
-        scenarios,
+        scenarios: scenarios.filter((scenario) => !scenario.deletedAt),
         saveScenario,
         deleteScenario,
         authUser,
@@ -282,6 +310,8 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signUp,
         signOut,
+        syncing,
+        syncError,
       }}
     >
       {children}

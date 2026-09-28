@@ -1,7 +1,7 @@
 # Supabase Setup
 
 1. Create a Supabase project and enable Email authentication.
-2. Run [supabase_schema.sql](supabase_schema.sql) in the Supabase SQL Editor.
+2. Run [supabase_schema.sql](supabase_schema.sql) in the Supabase SQL Editor. Re-run it after app updates; it is written to be migration-safe and adds sync tombstones/triggers to existing tables.
 3. Copy the project URL and public anon key into `.env`:
 
 ```env

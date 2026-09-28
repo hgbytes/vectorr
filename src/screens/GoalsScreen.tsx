@@ -63,7 +63,10 @@ function projectGoal(
 ) {
   const monthsToTarget = monthsUntil(goal.targetDate);
   const remaining = Math.max(goal.targetAmount - startingAmount, 0);
-  const requiredMonthly = remaining / monthsToTarget;
+  const deadlineContribution = remaining / monthsToTarget;
+  const requiredMonthly = goal.deadlineType === 'Fixed'
+    ? Math.max(deadlineContribution, goal.minimumMonthlyContribution)
+    : goal.minimumMonthlyContribution;
   const completionMonths =
     remaining === 0
       ? 0
@@ -487,7 +490,7 @@ function detectConflicts(
       (sum, item) => sum + item.projection.requiredMonthly,
       0
     );
-    if (group.length > 1 && required > availableBudget) {
+    if (group.length > 1 && group.every((item) => item.goal.deadlineType === 'Fixed') && required > availableBudget) {
       conflicts.push({
         title: 'DEADLINE COLLISION',
         detail: `${group.length} goals need ${formatCurrency(required)} monthly before ${deadline}.`,
@@ -509,7 +512,7 @@ function detectConflicts(
   }
 
   const pressuredGoals = projections.filter(
-    (item) => item.projection.requiredMonthly > equalShare
+    (item) => item.goal.deadlineType === 'Fixed' && item.projection.requiredMonthly > equalShare
   );
   for (const item of pressuredGoals) {
     conflicts.push({

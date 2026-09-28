@@ -20,7 +20,7 @@ function timestamp(value?: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function mergeRows<T extends { id: string; updatedAt?: string }>(
+function mergeRows<T extends { id: string; updatedAt?: string; deletedAt?: string }>(
   local: T[],
   remote: T[]
 ): T[] {
@@ -81,6 +81,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
     note: row.note ?? '',
     date: row.expense_date,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at ?? undefined,
   }));
   const remoteGoals: FinancialGoal[] = (goalsResult.data ?? []).map((row) => ({
     id: row.id,
@@ -93,6 +94,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
     minimumMonthlyContribution: Number(row.minimum_monthly_contribution),
     deadlineType: row.deadline_type,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at ?? undefined,
   }));
   const remoteScenarios: GoalScenario[] = (scenariosResult.data ?? []).map((row) => ({
     id: row.id,
@@ -103,6 +105,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
     conflicts: row.conflicts ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    deletedAt: row.deleted_at ?? undefined,
   }));
   const remoteReview: ProgressSnapshot | null = reviewResult.data
     ? {
@@ -152,6 +155,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
         note: expense.note,
         expense_date: expense.date,
         updated_at: expense.updatedAt ?? new Date().toISOString(),
+        deleted_at: expense.deletedAt ?? null,
       }))
     )).error
   );
@@ -169,6 +173,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
         minimum_monthly_contribution: goal.minimumMonthlyContribution,
         deadline_type: goal.deadlineType,
         updated_at: goal.updatedAt ?? new Date().toISOString(),
+        deleted_at: goal.deletedAt ?? null,
       }))
     )).error
   );
@@ -184,6 +189,7 @@ export async function syncUserData(userId: string, local: SyncState): Promise<Sy
         conflicts: scenario.conflicts,
         created_at: scenario.createdAt,
         updated_at: scenario.updatedAt ?? new Date().toISOString(),
+        deleted_at: scenario.deletedAt ?? null,
       }))
     )).error
   );
