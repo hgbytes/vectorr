@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
+  AiInsight,
   DEFAULT_FINANCIAL_PROFILE,
   Expense,
   FinancialGoal,
@@ -14,6 +15,7 @@ import {
   GoalScenario,
   ProgressSnapshot,
 } from './types';
+import { AdvisorSummary, fetchAiInsights } from './aiAdvisor';
 import {
   loadExpenses,
   loadFinancialProfile,
@@ -57,6 +59,11 @@ interface ExpensesContextValue {
   recordReview: (snapshot: ProgressSnapshot) => Promise<void>;
   syncing: boolean;
   syncError: string | null;
+  aiInsights: AiInsight[] | null;
+  aiInsightsGeneratedAt: string | null;
+  aiInsightsLoading: boolean;
+  aiInsightsError: string | null;
+  refreshAiInsights: (summary: AdvisorSummary) => Promise<void>;
 }
 
 const ExpensesContext = createContext<ExpensesContextValue | undefined>(
@@ -76,6 +83,10 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<AiInsight[] | null>(null);
+  const [aiInsightsGeneratedAt, setAiInsightsGeneratedAt] = useState<string | null>(null);
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+  const [aiInsightsError, setAiInsightsError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -262,6 +273,20 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
     await syncState({ expenses, profile, goals, scenarios: next, review: lastReview });
   };
 
+  const refreshAiInsights = async (summary: AdvisorSummary) => {
+    setAiInsightsLoading(true);
+    setAiInsightsError(null);
+    try {
+      const result = await fetchAiInsights(summary);
+      setAiInsights(result.insights);
+      setAiInsightsGeneratedAt(result.generatedAt);
+    } catch (error) {
+      setAiInsightsError(error instanceof Error ? error.message : 'AI advisor request failed.');
+    } finally {
+      setAiInsightsLoading(false);
+    }
+  };
+
   const signIn = async (email: string, password: string) => {
     if (!supabase) throw new Error('Supabase is not configured.');
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -312,6 +337,11 @@ export function ExpensesProvider({ children }: { children: React.ReactNode }) {
         signOut,
         syncing,
         syncError,
+        aiInsights,
+        aiInsightsGeneratedAt,
+        aiInsightsLoading,
+        aiInsightsError,
+        refreshAiInsights,
       }}
     >
       {children}

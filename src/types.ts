@@ -115,3 +115,11 @@ export interface ProgressSnapshot {
   totalTarget: number;
   updatedAt?: string;
 }
+
+export type AiInsightSeverity = 'info' | 'warning' | 'positive';
+
+export interface AiInsight {
+  title: string;
+  detail: string;
+  severity: AiInsightSeverity;
+}

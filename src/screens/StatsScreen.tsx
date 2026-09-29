@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
+import { colors, radius } from '../theme';
+import Text from '../components/Text';
 
 function formatCurrency(amount: number) {
   return `₹${amount.toFixed(2)}`;
@@ -31,15 +33,11 @@ export default function StatsScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.titleBar}>
-          <View>
-            <Text style={styles.windowCaption}>VECTORR / ARCHIVE</Text>
-            <Text style={styles.title}>SYSTEM BREAKDOWN</Text>
-          </View>
-          <Text style={styles.titleCode}>STATS.EXE</Text>
+          <Text style={styles.title}>Breakdown</Text>
         </View>
         {byCategory.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>NO DATA YET</Text>
+            <Text style={styles.emptyText}>No data yet</Text>
           </View>
         ) : (
           byCategory.map(({ category, amount }) => {
@@ -74,30 +72,26 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F6FF' },
+  container: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 20, gap: 4, paddingBottom: 32 },
-  titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  windowCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
-  title: { fontFamily: 'monospace', fontSize: 21, fontWeight: '700', color: '#201A33' },
-  titleCode: { fontFamily: 'monospace', fontSize: 10, color: '#008F7D' },
+  titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  title: { fontSize: 24, fontWeight: '600', color: colors.text },
   item: { marginBottom: 20 },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  itemLabel: { fontFamily: 'monospace', fontSize: 14, fontWeight: '600', color: '#201A33' },
-  itemAmount: { fontFamily: 'monospace', fontSize: 14, fontWeight: '700', color: '#A45A00' },
+  itemLabel: { fontSize: 14, fontWeight: '500', color: colors.text },
+  itemAmount: { fontSize: 14, fontWeight: '600', color: colors.text },
   barTrack: {
-    height: 10,
-    borderRadius: 0,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#B8AEDB',
+    height: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceMuted,
     overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: 0 },
-  itemPct: { fontFamily: 'monospace', fontSize: 11, color: '#6B6680', marginTop: 4 },
+  barFill: { height: '100%', borderRadius: radius.sm },
+  itemPct: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  emptyText: { fontFamily: 'monospace', fontSize: 15, color: '#6B6680' },
+  emptyText: { fontSize: 15, color: colors.textMuted },
 });

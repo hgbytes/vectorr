@@ -1,15 +1,23 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category, Expense, FinancialGoal } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
+import { colors, glow, radius } from '../theme';
+import Text from '../components/Text';
+import { buildAdvisorSummary } from '../aiAdvisor';
 
 function formatCurrency(amount: number) {
   return `₹${amount.toFixed(2)}`;
@@ -35,7 +43,7 @@ function CategoryFilter({
 }) {
   return (
     <View style={styles.filterPanel}>
-      <Text style={styles.filterLabel}>CATEGORY</Text>
+      <Text style={styles.filterLabel}>Category</Text>
       <View style={styles.filterRow}>
         {(['All', ...CATEGORIES] as const).map((category) => (
           <Pressable
@@ -52,7 +60,7 @@ function CategoryFilter({
                 selected === category && styles.filterTextSelected,
               ]}
             >
-              {category.toUpperCase()}
+              {category}
             </Text>
           </Pressable>
         ))}
@@ -138,26 +146,26 @@ function ExpenseCalendar({
   return (
     <View style={styles.calendar}>
       <View style={styles.calendarHeader}>
-        <Text style={styles.calendarTitle}>{monthLabel.toUpperCase()}</Text>
+        <Text style={styles.calendarTitle}>{monthLabel}</Text>
         <View style={styles.calendarControls}>
           <Pressable
             onPress={() => shiftMonth(-1)}
             style={styles.calendarButton}
             accessibilityLabel="Previous month"
           >
-            <Text style={styles.calendarButtonText}>{'<'}</Text>
+            <Text style={styles.calendarButtonText}>{'‹'}</Text>
           </Pressable>
           <Pressable
             onPress={() => shiftMonth(1)}
             style={styles.calendarButton}
             accessibilityLabel="Next month"
           >
-            <Text style={styles.calendarButtonText}>{'>'}</Text>
+            <Text style={styles.calendarButtonText}>{'›'}</Text>
           </Pressable>
         </View>
       </View>
       <View style={styles.monthSummary}>
-        <Text style={styles.monthSummaryLabel}>SPENT</Text>
+        <Text style={styles.monthSummaryLabel}>Spent</Text>
         <Text style={styles.monthSummaryValue}>{formatCurrency(monthlyTotal)}</Text>
       </View>
       <View style={styles.weekRow}>
@@ -208,20 +216,20 @@ function ExpenseCalendar({
               Number(selectedDate.split('-')[0]),
               Number(selectedDate.split('-')[1]),
               Number(selectedDate.split('-')[2])
-            ).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
+            ).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
           </Text>
           <Text style={styles.daySummaryValue}>{formatCurrency(selectedTotal)}</Text>
           <Text style={styles.daySummaryMeta}>
-            {selectedExpenses.length} EXPENSE{selectedExpenses.length === 1 ? '' : 'S'}
+            {selectedExpenses.length} expense{selectedExpenses.length === 1 ? '' : 's'}
             {selectedGoals.length > 0
-              ? ` // GOAL DUE: ${selectedGoals.map((goal) => goal.name).join(', ')}`
+              ? ` · Goal due: ${selectedGoals.map((goal) => goal.name).join(', ')}`
               : ''}
           </Text>
         </View>
       ) : (
-        <Text style={styles.calendarHint}>TAP A DATE FOR TOTALS</Text>
+        <Text style={styles.calendarHint}>Tap a date for totals</Text>
       )}
-      <Text style={styles.calendarLegend}>● EXPENSE   ◆ GOAL DUE   HIGHLIGHT = HIGH SPEND</Text>
+      <Text style={styles.calendarLegend}>● Expense   ◆ Goal due   Highlight = high spend</Text>
     </View>
   );
 }
@@ -314,10 +322,10 @@ function CategoryBreakdown({
   return (
     <View style={styles.breakdown}>
       <View style={styles.breakdownHeader}>
-        <Text style={styles.breakdownTitle}>BREAKDOWN</Text>
+        <Text style={styles.breakdownTitle}>Breakdown</Text>
       </View>
       {byCategory.length === 0 ? (
-        <Text style={styles.breakdownEmpty}>NO DATA YET</Text>
+        <Text style={styles.breakdownEmpty}>No data yet</Text>
       ) : (
         byCategory.map(({ category, amount }) => {
           const pct = total > 0 ? amount / total : 0;
@@ -344,6 +352,165 @@ function CategoryBreakdown({
             </View>
           );
         })
+      )}
+    </View>
+  );
+}
+
+function useSpin(active: boolean) {
+  const [spin] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    if (!active) {
+      spin.stopAnimation();
+      spin.setValue(0);
+      return;
+    }
+    spin.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [active, spin]);
+  return spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+}
+
+function AiInsightsWidget() {
+  const navigation = useNavigation();
+  const {
+    authUser,
+    profile,
+    goals,
+    expenses,
+    aiInsights,
+    aiInsightsGeneratedAt,
+    aiInsightsLoading,
+    aiInsightsError,
+    refreshAiInsights,
+  } = useExpenses();
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const spinDeg = useSpin(aiInsightsLoading);
+  const insights = aiInsights ?? [];
+
+  const handleRefresh = () => {
+    const now = new Date();
+    const monthlyExpensesTotal = expenses
+      .filter((expense) => {
+        const date = new Date(expense.date);
+        return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+      })
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    const emergencyContribution = Math.max(profile.emergencyFundTarget - profile.currentSavings, 0) / 12;
+    const availableGoalBudget = Math.max(
+      profile.monthlyIncome - monthlyExpensesTotal - profile.monthlyDebtPayments - emergencyContribution,
+      0
+    );
+    const summary = buildAdvisorSummary(goals, profile, expenses, availableGoalBudget, monthlyExpensesTotal, []);
+    void refreshAiInsights(summary);
+  };
+
+  const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (containerWidth > 0) {
+      setActiveIndex(Math.round(event.nativeEvent.contentOffset.x / containerWidth));
+    }
+  };
+
+  const jumpTo = (index: number) => {
+    scrollRef.current?.scrollTo({ x: index * containerWidth, animated: true });
+    setActiveIndex(index);
+  };
+
+  return (
+    <View
+      style={styles.aiWidget}
+      onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+    >
+      <View style={styles.aiWidgetHeader}>
+        <Text style={styles.aiWidgetTitle}>AI Insights</Text>
+        {authUser && (
+          <Pressable
+            onPress={handleRefresh}
+            style={styles.aiRefreshIconButton}
+            hitSlop={8}
+            accessibilityLabel="Refresh AI insights"
+          >
+            <Animated.Text style={[styles.aiRefreshIcon, { transform: [{ rotate: spinDeg }] }]}>
+              {'⟳'}
+            </Animated.Text>
+          </Pressable>
+        )}
+      </View>
+
+      {!authUser ? (
+        <Pressable
+          style={styles.aiSignInPrompt}
+          onPress={() => navigation.navigate('Profile' as never)}
+        >
+          <Text style={styles.aiSignInText}>Sign in to unlock AI insights</Text>
+          <Text style={styles.aiSignInSubtext}>Tap to go to Profile →</Text>
+        </Pressable>
+      ) : aiInsightsLoading && insights.length === 0 ? (
+        <Text style={styles.aiStatusText}>Analyzing your finances…</Text>
+      ) : aiInsightsError ? (
+        <Pressable onPress={handleRefresh}>
+          <Text style={styles.aiErrorText}>{aiInsightsError} — tap to retry</Text>
+        </Pressable>
+      ) : insights.length === 0 ? (
+        <Pressable style={styles.aiGenerateButton} onPress={handleRefresh}>
+          <Text style={styles.aiGenerateButtonText}>✨ Generate insights</Text>
+        </Pressable>
+      ) : (
+        <>
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleScrollEnd}
+          >
+            {insights.map((insight, index) => (
+              <Pressable
+                key={`${insight.title}-${index}`}
+                style={[styles.aiCard, { width: containerWidth || undefined }]}
+                onPress={() => jumpTo((index + 1) % insights.length)}
+              >
+                <View
+                  style={[
+                    styles.aiCardAccent,
+                    insight.severity === 'warning' && styles.aiCardAccentWarning,
+                    insight.severity === 'positive' && styles.aiCardAccentPositive,
+                  ]}
+                />
+                <Text style={styles.aiCardTitle}>{insight.title}</Text>
+                <Text style={styles.aiCardDetail}>{insight.detail}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {insights.length > 1 && (
+            <View style={styles.aiDots}>
+              {insights.map((_, index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => jumpTo(index)}
+                  hitSlop={6}
+                  style={[styles.aiDot, index === activeIndex && styles.aiDotActive]}
+                />
+              ))}
+            </View>
+          )}
+          {aiInsightsGeneratedAt && (
+            <Text style={styles.aiUpdatedAt}>
+              Updated {new Date(aiInsightsGeneratedAt).toLocaleString()}
+            </Text>
+          )}
+        </>
       )}
     </View>
   );
@@ -376,25 +543,21 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.windowChrome}>
-          <Text style={styles.windowTitle}>VECTORR</Text>
-          <Text style={styles.windowControls}>● ONLINE</Text>
-        </View>
-        <Text style={styles.headerLabel}>TOTAL SPENT</Text>
+        <Text style={styles.headerLabel}>Total spent</Text>
         <Text style={styles.headerTotal}>{formatCurrency(visibleTotal)}</Text>
         <Text style={styles.headerCount}>
           {visibleExpenses.length} logged
-          {categoryFilter === 'All' ? '' : ` // ${categoryFilter.toUpperCase()}`}
+          {categoryFilter === 'All' ? '' : ` · ${categoryFilter}`}
         </Text>
         <View style={styles.headerMonthly}>
-          <Text style={styles.headerMonthlyLabel}>THIS MONTH</Text>
+          <Text style={styles.headerMonthlyLabel}>This month</Text>
           <Text style={styles.headerMonthlyValue}>{formatCurrency(monthlyTotal)}</Text>
         </View>
       </View>
 
       {loading ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>LOADING...</Text>
+          <Text style={styles.emptyText}>Loading…</Text>
         </View>
       ) : (
         <FlatList
@@ -403,21 +566,21 @@ export default function HomeScreen() {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View>
+              <AiInsightsWidget />
               <CategoryFilter selected={categoryFilter} onSelect={setCategoryFilter} />
-              <CollapsibleSection title="CALENDAR" expanded={showCalendar} onToggle={() => setShowCalendar((current) => !current)}>
+              <CollapsibleSection title="Calendar" expanded={showCalendar} onToggle={() => setShowCalendar((current) => !current)}>
                 <ExpenseCalendar expenses={visibleExpenses} goals={goals} />
               </CollapsibleSection>
-              <CollapsibleSection title="BREAKDOWN" expanded={showBreakdown} onToggle={() => setShowBreakdown((current) => !current)}>
+              <CollapsibleSection title="Breakdown" expanded={showBreakdown} onToggle={() => setShowBreakdown((current) => !current)}>
                 <CategoryBreakdown expenses={visibleExpenses} total={visibleTotal} />
               </CollapsibleSection>
             </View>
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyEmoji}>[ $$$ ]</Text>
-              <Text style={styles.emptyText}>NO EXPENSES YET</Text>
+              <Text style={styles.emptyText}>No expenses yet</Text>
               <Text style={styles.emptySubtext}>
-                TAP + TO ADD ONE
+                Tap + to add one
               </Text>
             </View>
           }
@@ -431,83 +594,88 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F6FF' },
+  container: { flex: 1, backgroundColor: colors.background },
   header: {
     width: '100%',
     maxWidth: 760,
     alignSelf: 'center',
-    padding: 18,
-    backgroundColor: '#E9E2FF',
-    borderBottomWidth: 3,
-    borderBottomColor: '#D6009A',
-    shadowColor: '#00F5D4',
-    shadowOpacity: 0.35,
-    shadowRadius: 0,
-    shadowOffset: { width: 5, height: 5 },
-    elevation: 5,
-  },
-  windowChrome: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: 20,
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#B8AEDB',
-    paddingBottom: 8,
-    marginBottom: 14,
+    borderBottomColor: colors.border,
   },
-  windowTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  windowControls: { color: '#008F7D', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
-  headerTopline: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 26 },
-  headerLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 12, fontWeight: '700' },
-  headerStatus: { color: '#008F7D', fontFamily: 'monospace', fontSize: 11, fontWeight: '700' },
-  headerTotal: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 38, fontWeight: '700', marginTop: 6 },
-  headerCount: { color: '#D6009A', fontFamily: 'monospace', fontSize: 12, marginTop: 8 },
-  headerMonthly: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderTopColor: '#B8AEDB', marginTop: 12, paddingTop: 10 },
-  headerMonthlyLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  headerMonthlyValue: { color: '#008F7D', fontFamily: 'monospace', fontSize: 17, fontWeight: '700' },
+  headerLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '500' },
+  headerTotal: { color: colors.accent, fontSize: 40, fontWeight: '700', marginTop: 6 },
+  headerCount: { color: colors.textMuted, fontSize: 13, marginTop: 6 },
+  headerMonthly: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderTopColor: colors.border, marginTop: 14, paddingTop: 12 },
+  headerMonthlyLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '500' },
+  headerMonthlyValue: { color: colors.text, fontSize: 17, fontWeight: '600' },
   list: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 16, gap: 12 },
   collapsibleSection: { marginBottom: 8 },
-  collapsibleToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', paddingHorizontal: 12, paddingVertical: 10 },
-  collapsibleTitle: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 10, fontWeight: '700' },
-  collapsibleIcon: { color: '#D6009A', fontFamily: 'monospace', fontSize: 18, fontWeight: '700' },
-  filterPanel: { backgroundColor: '#E9E2FF', borderWidth: 1, borderColor: '#B8AEDB', padding: 12, marginBottom: 10 },
-  filterLabel: { color: '#5D557A', fontFamily: 'monospace', fontSize: 9, fontWeight: '700', marginBottom: 8 },
+  collapsibleToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12 },
+  collapsibleTitle: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  collapsibleIcon: { color: colors.textMuted, fontSize: 18, fontWeight: '400' },
+  aiWidget: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, marginBottom: 10, overflow: 'hidden' },
+  aiWidgetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  aiWidgetTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  aiRefreshIconButton: { width: 28, height: 28, borderRadius: radius.sm, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  aiRefreshIcon: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+  aiSignInPrompt: { paddingVertical: 4, gap: 4 },
+  aiSignInText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  aiSignInSubtext: { color: colors.textMuted, fontSize: 12 },
+  aiStatusText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
+  aiErrorText: { color: colors.danger, fontSize: 12, lineHeight: 16 },
+  aiGenerateButton: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 10, ...glow },
+  aiGenerateButtonText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
+  aiCard: { paddingRight: 4, gap: 6 },
+  aiCardAccent: { height: 3, width: 32, borderRadius: 2, backgroundColor: colors.info, marginBottom: 2 },
+  aiCardAccentWarning: { backgroundColor: colors.warning },
+  aiCardAccentPositive: { backgroundColor: colors.positive },
+  aiCardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  aiCardDetail: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  aiDots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
+  aiDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
+  aiDotActive: { backgroundColor: colors.accent, width: 16 },
+  aiUpdatedAt: { color: colors.textFaint, fontSize: 10, marginTop: 8, textAlign: 'right' },
+  filterPanel: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 14, marginBottom: 10 },
+  filterLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '500', marginBottom: 8 },
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  filterChip: { borderWidth: 1, borderColor: '#B8AEDB', backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 6 },
-  filterChipSelected: { backgroundColor: '#FF4FD8', borderColor: '#00F5D4' },
-  filterText: { color: '#3D3854', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  filterTextSelected: { color: '#201A33' },
-  calendar: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#B8AEDB', padding: 14, marginBottom: 4 },
+  filterChip: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 6 },
+  filterChipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
+  filterText: { color: colors.text, fontSize: 12, fontWeight: '500' },
+  filterTextSelected: { color: colors.onAccent },
+  calendar: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 16, marginBottom: 4 },
   calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  calendarCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
-  calendarTitle: { fontFamily: 'monospace', fontSize: 17, fontWeight: '700', color: '#201A33' },
+  calendarTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
   calendarControls: { flexDirection: 'row', gap: 6 },
-  calendarButton: { width: 32, height: 30, borderWidth: 1, borderColor: '#B8AEDB', alignItems: 'center', justifyContent: 'center' },
-  calendarButtonText: { color: '#008F7D', fontFamily: 'monospace', fontSize: 16, fontWeight: '700' },
-  monthSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E1DAF1', paddingVertical: 8, marginBottom: 10 },
-  monthSummaryLabel: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  monthSummaryValue: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 16, fontWeight: '700' },
-  weekRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E1DAF1', paddingBottom: 6, marginBottom: 4 },
-  weekLabel: { width: '14.2857%', textAlign: 'center', color: '#6B6680', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
+  calendarButton: { width: 32, height: 30, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  calendarButtonText: { color: colors.text, fontSize: 16, fontWeight: '500' },
+  monthSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border, paddingVertical: 8, marginBottom: 10 },
+  monthSummaryLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '500' },
+  monthSummaryValue: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  weekRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 6, marginBottom: 4 },
+  weekLabel: { width: '14.2857%', textAlign: 'center', color: colors.textMuted, fontSize: 11, fontWeight: '500' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calendarCell: { width: '14.2857%', minHeight: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#F0ECFA' },
-  calendarToday: { borderColor: '#D6009A', backgroundColor: '#FFF3FC' },
-  calendarUnusual: { backgroundColor: '#FFE7EF', borderColor: '#C52757' },
-  calendarSelected: { borderWidth: 2, borderColor: '#5B2DB8' },
-  calendarDate: { color: '#6B6680', fontFamily: 'monospace', fontSize: 11 },
-  calendarDateActive: { color: '#5B2DB8', fontWeight: '700' },
-  calendarMarker: { color: '#00A990', fontFamily: 'monospace', fontSize: 13, lineHeight: 13 },
-  calendarGoalMarker: { color: '#D6009A', fontFamily: 'monospace', fontSize: 9, lineHeight: 9 },
-  calendarHint: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 9, marginTop: 10 },
-  daySummary: { backgroundColor: '#F8F6FF', borderLeftWidth: 3, borderLeftColor: '#D6009A', padding: 10, marginTop: 10 },
-  daySummaryLabel: { color: '#6B6680', fontFamily: 'monospace', fontSize: 9, fontWeight: '700' },
-  daySummaryValue: { color: '#5B2DB8', fontFamily: 'monospace', fontSize: 20, fontWeight: '700', marginTop: 3 },
-  daySummaryMeta: { color: '#008F7D', fontFamily: 'monospace', fontSize: 9, marginTop: 3 },
-  calendarLegend: { color: '#9B91B8', fontFamily: 'monospace', fontSize: 8, marginTop: 9 },
+  calendarCell: { width: '14.2857%', minHeight: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'transparent', borderRadius: radius.sm },
+  calendarToday: { borderColor: colors.text, backgroundColor: colors.surfaceMuted },
+  calendarUnusual: { backgroundColor: colors.dangerSoft },
+  calendarSelected: { borderWidth: 1, borderColor: colors.text, backgroundColor: colors.accentSoft },
+  calendarDate: { color: colors.textMuted, fontSize: 12 },
+  calendarDateActive: { color: colors.text, fontWeight: '600' },
+  calendarMarker: { color: colors.positive, fontSize: 12, lineHeight: 12 },
+  calendarGoalMarker: { color: colors.textMuted, fontSize: 9, lineHeight: 9 },
+  calendarHint: { color: colors.textFaint, fontSize: 12, marginTop: 10 },
+  daySummary: { backgroundColor: colors.surfaceMuted, borderRadius: radius.sm, padding: 12, marginTop: 10 },
+  daySummaryLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '500' },
+  daySummaryValue: { color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 3 },
+  daySummaryMeta: { color: colors.textMuted, fontSize: 12, marginTop: 3 },
+  calendarLegend: { color: colors.textFaint, fontSize: 11, marginTop: 10 },
   breakdown: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#B8AEDB',
-    padding: 14,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 16,
     marginTop: 4,
   },
   breakdownHeader: {
@@ -516,50 +684,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  breakdownCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
-  breakdownTitle: { fontFamily: 'monospace', fontSize: 17, fontWeight: '700', color: '#201A33' },
-  breakdownCode: { fontFamily: 'monospace', fontSize: 10, color: '#008F7D' },
+  breakdownTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
   breakdownItem: { marginBottom: 14 },
   breakdownItemHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  breakdownLabel: { fontFamily: 'monospace', fontSize: 12, fontWeight: '600', color: '#201A33' },
-  breakdownAmount: { fontFamily: 'monospace', fontSize: 12, fontWeight: '700', color: '#A45A00' },
-  breakdownTrack: { height: 9, backgroundColor: '#F0ECFA', borderWidth: 1, borderColor: '#B8AEDB', overflow: 'hidden' },
+  breakdownLabel: { fontSize: 13, fontWeight: '500', color: colors.text },
+  breakdownAmount: { fontSize: 13, fontWeight: '600', color: colors.text },
+  breakdownTrack: { height: 6, backgroundColor: colors.surfaceMuted, borderRadius: radius.sm, overflow: 'hidden' },
   breakdownFill: { height: '100%' },
-  breakdownPct: { fontFamily: 'monospace', fontSize: 10, color: '#6B6680', marginTop: 3 },
-  breakdownEmpty: { fontFamily: 'monospace', fontSize: 11, color: '#6B6680' },
+  breakdownPct: { fontSize: 11, color: colors.textMuted, marginTop: 3 },
+  breakdownEmpty: { fontSize: 13, color: colors.textMuted },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 12,
     gap: 12,
     borderWidth: 1,
-    borderColor: '#B8AEDB',
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 0,
-    shadowOffset: { width: 4, height: 4 },
-    elevation: 3,
+    borderColor: colors.border,
   },
   iconBadge: {
     width: 42,
     height: 42,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#A8B2D1',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconText: { fontSize: 20 },
   rowMain: { flex: 1 },
-  rowTitle: { fontFamily: 'monospace', fontSize: 14, fontWeight: '700', color: '#201A33' },
-  rowSubtitle: { fontFamily: 'monospace', fontSize: 11, color: '#6B6680', marginTop: 4 },
-  rowAmount: { fontFamily: 'monospace', fontSize: 14, fontWeight: '700', color: '#A45A00' },
+  rowTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  rowSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  rowAmount: { fontSize: 14, fontWeight: '600', color: colors.text },
   deleteBtn: { paddingHorizontal: 6, paddingVertical: 6 },
-  deleteText: { color: '#C52757', fontFamily: 'monospace', fontSize: 16 },
+  deleteText: { color: colors.textFaint, fontSize: 16 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  emptyEmoji: { color: '#D6009A', fontFamily: 'monospace', fontSize: 25, marginBottom: 8 },
-  emptyText: { fontFamily: 'monospace', fontSize: 16, fontWeight: '700', color: '#201A33' },
-  emptySubtext: { fontFamily: 'monospace', fontSize: 11, color: '#6B6680', textAlign: 'center', paddingHorizontal: 24 },
+  emptyText: { fontSize: 16, fontWeight: '600', color: colors.text },
+  emptySubtext: { fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
 });

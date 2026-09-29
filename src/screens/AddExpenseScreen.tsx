@@ -4,7 +4,6 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -12,6 +11,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
+import { colors, glow, radius } from '../theme';
+import Text from '../components/Text';
 
 export default function AddExpenseScreen() {
   const { addExpense } = useExpenses();
@@ -60,24 +61,23 @@ export default function AddExpenseScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.titleBar}>
-          <Text style={styles.title}>ADD EXPENSE</Text>
-          <Text style={styles.windowMark}>[ + ]</Text>
+          <Text style={styles.title}>Add expense</Text>
         </View>
 
-        <Text style={styles.label}>AMOUNT</Text>
+        <Text style={styles.label}>Amount</Text>
         <View style={styles.amountRow}>
           <Text style={styles.currencySymbol}>₹</Text>
           <TextInput
             style={styles.amountInput}
             keyboardType="decimal-pad"
             placeholder="0.00"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textFaint}
             value={amount}
             onChangeText={(value) => setAmount(formatAmount(value))}
           />
         </View>
 
-        <Text style={styles.label}>CATEGORY</Text>
+        <Text style={styles.label}>Category</Text>
         <View style={styles.categoryGrid}>
           {CATEGORIES.map((c) => {
             const selected = c === category;
@@ -87,18 +87,14 @@ export default function AddExpenseScreen() {
                 onPress={() => setCategory(c)}
                 style={[
                   styles.categoryChip,
-                  {
-                    backgroundColor: selected
-                      ? CATEGORY_COLORS[c]
-                      : CATEGORY_COLORS[c] + '18',
-                  },
+                  selected && { backgroundColor: CATEGORY_COLORS[c], borderColor: CATEGORY_COLORS[c] },
                 ]}
               >
                 <Text style={styles.categoryIcon}>{CATEGORY_ICONS[c]}</Text>
                 <Text
                   style={[
                     styles.categoryLabel,
-                    { color: selected ? '#201A33' : '#3D3854' },
+                    selected && { color: colors.onAccent },
                   ]}
                 >
                   {c}
@@ -108,18 +104,18 @@ export default function AddExpenseScreen() {
           })}
         </View>
 
-        <Text style={styles.label}>NOTE</Text>
+        <Text style={styles.label}>Note</Text>
         <TextInput
           style={styles.noteInput}
           placeholder="e.g. coffee"
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textFaint}
           value={note}
           onChangeText={setNote}
         />
 
         {!!formError && <Text style={styles.formError}>{formError}</Text>}
         <Pressable style={[styles.submitBtn, saving && styles.disabledButton]} onPress={handleSubmit} disabled={saving}>
-          <Text style={styles.submitText}>{saving ? '[ SAVING... ]' : '[ SAVE ]'}</Text>
+          <Text style={styles.submitText}>{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -127,35 +123,29 @@ export default function AddExpenseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F6FF' },
+  container: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 20, gap: 8, paddingBottom: 32 },
-  titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  windowCaption: { fontFamily: 'monospace', fontSize: 9, fontWeight: '700', color: '#D6009A', marginBottom: 5 },
-  title: { fontFamily: 'monospace', fontSize: 22, fontWeight: '700', color: '#201A33' },
-  windowMark: { color: '#008F7D', fontFamily: 'monospace', fontSize: 15 },
+  titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  title: { fontSize: 24, fontWeight: '600', color: colors.text },
   label: {
-    fontFamily: 'monospace',
     fontSize: 12,
     fontWeight: '600',
-    color: '#D6009A',
+    color: colors.textMuted,
     marginTop: 16,
     marginBottom: 8,
-    textTransform: 'uppercase',
   },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#B8AEDB',
-    borderLeftColor: '#00F5D4',
-    borderLeftWidth: 3,
+    borderColor: colors.border,
   },
-  currencySymbol: { fontFamily: 'monospace', fontSize: 28, color: '#008F7D', marginRight: 4 },
-  amountInput: { flex: 1, fontFamily: 'monospace', fontSize: 28, color: '#201A33', outlineStyle: 'none' as any },
+  currencySymbol: { fontSize: 26, color: colors.accent, marginRight: 4, fontWeight: '600' },
+  amountInput: { flex: 1, fontSize: 26, color: colors.text, outlineStyle: 'none' as any },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
     flexDirection: 'row',
@@ -163,33 +153,32 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 0,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#B8AEDB',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   categoryIcon: { fontSize: 14 },
-  categoryLabel: { fontFamily: 'monospace', fontSize: 12, fontWeight: '600' },
+  categoryLabel: { fontSize: 13, fontWeight: '500', color: colors.text },
   noteInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#B8AEDB',
-    color: '#201A33',
-    fontFamily: 'monospace',
+    borderColor: colors.border,
+    color: colors.text,
   },
   submitBtn: {
-    backgroundColor: '#FF4FD8',
-    borderRadius: 0,
-    borderWidth: 2,
-    borderColor: '#00F5D4',
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 28,
+    ...glow,
   },
-  formError: { color: '#C52757', fontFamily: 'monospace', fontSize: 10, lineHeight: 14, marginTop: 8 },
+  formError: { color: colors.danger, fontSize: 12, lineHeight: 16, marginTop: 8 },
   disabledButton: { opacity: 0.55 },
-  submitText: { color: '#201A33', fontFamily: 'monospace', fontSize: 14, fontWeight: '700' },
+  submitText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
 });
