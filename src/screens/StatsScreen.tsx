@@ -3,7 +3,8 @@ import { SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
-import { colors, radius } from '../theme';
+import { ThemeColors, radius } from '../theme';
+import { useTheme } from '../ThemeContext';
 import Text from '../components/Text';
 
 function formatCurrency(amount: number) {
@@ -12,6 +13,8 @@ function formatCurrency(amount: number) {
 
 export default function StatsScreen() {
   const { expenses, total } = useExpenses();
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const byCategory = useMemo(() => {
     const sums: Record<Category, number> = {
@@ -71,7 +74,8 @@ export default function StatsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 20, gap: 4, paddingBottom: 32 },
   titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
@@ -94,4 +98,5 @@ const styles = StyleSheet.create({
   itemPct: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   empty: { alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   emptyText: { fontSize: 15, color: colors.textMuted },
-});
+  });
+}

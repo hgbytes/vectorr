@@ -8,9 +8,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useExpenses } from '../ExpensesContext';
 import { FinancialProfile } from '../types';
-import { colors, glow, radius } from '../theme';
+import { ThemeColors, ThemeGlow, radius } from '../theme';
+import { useTheme } from '../ThemeContext';
 import Text from '../components/Text';
 
 function formatCurrency(amount: number) {
@@ -45,6 +47,8 @@ export default function ProfileScreen() {
     syncing,
     syncError,
   } = useExpenses();
+  const { colors, glow, mode, toggleTheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [values, setValues] = useState(() => profileToStrings(profile));
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -143,6 +147,14 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.titleBar}>
           <Text style={styles.title}>Profile</Text>
+          <Pressable
+            onPress={toggleTheme}
+            style={styles.themeToggle}
+            accessibilityLabel={mode === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            hitSlop={8}
+          >
+            <Ionicons name={mode === 'dark' ? 'moon' : 'sunny'} size={18} color={colors.text} />
+          </Pressable>
         </View>
 
         <View style={styles.authPanel}>
@@ -271,6 +283,8 @@ function MetricGrid({
   emergencyCoverage: number;
   availableGoalBudget: number;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.metricGrid}>
       <Metric label="Savings rate" value={`${Math.round(savingsRate)}%`} />
@@ -282,6 +296,8 @@ function MetricGrid({
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>
@@ -291,6 +307,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function ReviewRow({ label, value }: { label: string; value: string }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.reviewRow}>
       <Text style={styles.reviewLabel}>{label}</Text>
@@ -312,6 +330,8 @@ function ProfileField({
   onChangeText: (value: string) => void;
   unit?: string;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -330,10 +350,12 @@ function ProfileField({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors, glow: ThemeGlow) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 20, gap: 8, paddingBottom: 36 },
   titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  themeToggle: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 24, fontWeight: '600', color: colors.text },
   localTitle: { color: colors.text, fontSize: 13, fontWeight: '600' },
   localText: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
@@ -377,4 +399,5 @@ const styles = StyleSheet.create({
   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   reviewLabel: { color: colors.textMuted, fontSize: 12 },
   reviewValue: { color: colors.text, fontSize: 13, fontWeight: '600' },
-});
+  });
+}

@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useExpenses } from '../ExpensesContext';
-import { colors, glow, radius } from '../theme';
+import { ThemeColors, ThemeGlow, radius } from '../theme';
+import { useTheme } from '../ThemeContext';
 import Text from '../components/Text';
 import {
   FinancialGoal,
@@ -238,6 +239,8 @@ function ScenarioPanel({
   onSave: (result: ScenarioResult, conflicts: GoalConflict[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const selected = results.find((result) => result.key === selectedKey) ?? results[0];
   if (!selected) return null;
   return (
@@ -300,6 +303,8 @@ function ScenarioPanel({
 }
 
 function RecommendationCard({ recommendation }: { recommendation: GoalRecommendation }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const actionable = Boolean(recommendation.onAction && recommendation.actionLabel);
   const [hovered, setHovered] = useState(false);
   return (
@@ -335,6 +340,8 @@ function RecommendationCard({ recommendation }: { recommendation: GoalRecommenda
 }
 
 function RecommendationPanel({ recommendations }: { recommendations: GoalRecommendation[] }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const actionableCount = recommendations.filter((item) => item.onAction).length;
   return (
     <View style={styles.recommendationPanel}>
@@ -379,6 +386,8 @@ function ProgressDashboard({
   lastReview: ProgressSnapshot | null;
   onSaveReview: (snapshot: ProgressSnapshot) => Promise<void>;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const totalSaved = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
   const totalTarget = goals.reduce((sum, goal) => sum + goal.targetAmount, 0);
   const progress = totalTarget > 0 ? Math.min((totalSaved / totalTarget) * 100, 100) : 0;
@@ -490,6 +499,8 @@ function ProgressDashboard({
 }
 
 function DashboardMetric({ label, value, risk = false }: { label: string; value: string; risk?: boolean }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.dashboardMetric}>
       <Text style={styles.dashboardMetricLabel}>{label}</Text>
@@ -593,6 +604,8 @@ function detectConflicts(
 }
 
 function ConflictPanel({ conflicts }: { conflicts: GoalConflict[] }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.conflictPanel}>
       {conflicts.length === 0 ? (
@@ -633,6 +646,8 @@ function InsightsPanel({
   onSaveScenario: (result: ScenarioResult, conflicts: GoalConflict[]) => Promise<void>;
   onDeleteScenario: (id: string) => Promise<void>;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<InsightsTab>(
     conflicts.length > 0 ? 'conflicts' : 'recommendations'
@@ -721,6 +736,8 @@ export default function GoalsScreen() {
     deleteScenario,
     deleteGoal,
   } = useExpenses();
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [currentAmount, setCurrentAmount] = useState('');
@@ -1020,7 +1037,7 @@ export default function GoalsScreen() {
             <TextInput
               style={styles.dateInput}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9B91B8"
+              placeholderTextColor={colors.textFaint}
               value={targetDate}
               onChangeText={setTargetDate}
             />
@@ -1122,6 +1139,8 @@ function GoalField({
   onChangeText: (value: string) => void;
   textInput?: boolean;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const handleChange = (value: string) => {
     if (textInput) {
       onChangeText(value);
@@ -1141,7 +1160,7 @@ function GoalField({
           style={styles.input}
           keyboardType={textInput ? 'default' : 'decimal-pad'}
           placeholder={placeholder}
-          placeholderTextColor="#9B91B8"
+          placeholderTextColor={colors.textFaint}
           value={value}
           onChangeText={handleChange}
         />
@@ -1159,6 +1178,8 @@ function AnalysisRow({
   value: string;
   emphasis?: boolean;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.analysisRow}>
       <Text style={styles.analysisLabel}>{label}</Text>
@@ -1182,6 +1203,8 @@ function GoalCard({
   goalsCount: number;
   onDelete: (id: string) => Promise<void>;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [expanded, setExpanded] = useState(false);
   const progress = Math.min(100, Math.max(0, (goal.currentAmount / goal.targetAmount) * 100));
   const projection = projectGoal(goal, currentContribution, profile.expectedAnnualReturn);
@@ -1299,7 +1322,8 @@ function GoalCard({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors, glow: ThemeGlow) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: {
     width: '100%',
@@ -1513,4 +1537,5 @@ const styles = StyleSheet.create({
   },
   detailsToggleText: { color: colors.text, fontSize: 12, fontWeight: '600' },
   deleteText: { color: colors.danger, fontSize: 12, fontWeight: '500' },
-});
+  });
+}

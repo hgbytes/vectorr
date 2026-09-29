@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -11,12 +11,15 @@ import { useNavigation } from '@react-navigation/native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
-import { colors, glow, radius } from '../theme';
+import { ThemeColors, ThemeGlow, radius } from '../theme';
+import { useTheme } from '../ThemeContext';
 import Text from '../components/Text';
 
 export default function AddExpenseScreen() {
   const { addExpense } = useExpenses();
   const navigation = useNavigation();
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Category>('Food');
   const [note, setNote] = useState('');
@@ -122,7 +125,8 @@ export default function AddExpenseScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors, glow: ThemeGlow) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 680, alignSelf: 'center', padding: 20, gap: 8, paddingBottom: 32 },
   titleBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -181,4 +185,5 @@ const styles = StyleSheet.create({
   formError: { color: colors.danger, fontSize: 12, lineHeight: 16, marginTop: 8 },
   disabledButton: { opacity: 0.55 },
   submitText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
-});
+  });
+}

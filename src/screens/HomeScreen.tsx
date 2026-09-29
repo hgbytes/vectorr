@@ -15,7 +15,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useExpenses } from '../ExpensesContext';
 import { CATEGORIES, Category, Expense, FinancialGoal } from '../types';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../categoryStyle';
-import { colors, glow, radius } from '../theme';
+import { ThemeColors, ThemeGlow, radius } from '../theme';
+import { useTheme } from '../ThemeContext';
 import Text from '../components/Text';
 import { buildAdvisorSummary } from '../aiAdvisor';
 
@@ -41,6 +42,8 @@ function CategoryFilter({
   selected: Category | 'All';
   onSelect: (category: Category | 'All') => void;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.filterPanel}>
       <Text style={styles.filterLabel}>Category</Text>
@@ -76,6 +79,8 @@ function ExpenseCalendar({
   expenses: Expense[];
   goals: FinancialGoal[];
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   );
@@ -241,6 +246,8 @@ function ExpenseRow({
   expense: Expense;
   onDelete: (id: string) => void;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.row}>
       <View
@@ -282,6 +289,8 @@ function CollapsibleSection({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   return (
     <View style={styles.collapsibleSection}>
       <Pressable onPress={onToggle} style={styles.collapsibleToggle} accessibilityRole="button">
@@ -300,6 +309,8 @@ function CategoryBreakdown({
   expenses: Expense[];
   total: number;
 }) {
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const byCategory = useMemo(() => {
     const sums: Record<Category, number> = {
       Food: 0,
@@ -393,6 +404,8 @@ function AiInsightsWidget() {
     aiInsightsError,
     refreshAiInsights,
   } = useExpenses();
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [containerWidth, setContainerWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
@@ -518,6 +531,8 @@ function AiInsightsWidget() {
 
 export default function HomeScreen() {
   const { expenses, goals = [], loading, deleteExpense } = useExpenses();
+  const { colors, glow } = useTheme();
+  const styles = useMemo(() => createStyles(colors, glow), [colors, glow]);
   const [categoryFilter, setCategoryFilter] = useState<Category | 'All'>('All');
   const [showCalendar, setShowCalendar] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -593,7 +608,8 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors, glow: ThemeGlow) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     width: '100%',
@@ -721,4 +737,5 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   emptyText: { fontSize: 16, fontWeight: '600', color: colors.text },
   emptySubtext: { fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 24 },
-});
+  });
+}
